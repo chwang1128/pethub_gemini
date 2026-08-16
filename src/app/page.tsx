@@ -354,6 +354,7 @@ export default function FullMapAIPortal() {
     }
   }, [stores, selectedDetailStore]);
 
+  // 🌟 關鍵修改 1：讓函式能夠回傳最新的店家陣列
   const searchGooglePlaces = async (keyword: string, searchType: 'gps' | 'mapCenter' = 'gps') => {
     setIsLoading(true);
     setShowSearchHereBtn(false);
@@ -433,17 +434,22 @@ export default function FullMapAIPortal() {
           setStores(allFetchedStores); 
           const topStores = sortedForCards.slice(0, 3);
           setDisplayedStores(topStores);
+          
+          return topStores; // 🌟 新增回傳
 
         } else {
           setStores(allFetchedStores);
           setDisplayedStores([]); 
+          return []; // 🌟 新增回傳
         }
 
       } else {
         setDisplayedStores([]);
+        return []; // 🌟 新增回傳
       }
     } catch (error) {
       console.error(error);
+      return []; // 🌟 新增回傳
     } finally {
       setIsLoading(false);
     }
@@ -457,9 +463,11 @@ export default function FullMapAIPortal() {
     setMessages(prev => [...prev, { sender: 'user', text }]);
     setInputQuery('');
     
-    // 啟動 Gemini API 打字狀態與地圖搜尋
+    // 啟動 Gemini API 打字狀態與等待地圖搜尋
     setIsAiTyping(true);
-    searchGooglePlaces(text, 'gps');
+    
+    // 🌟 關鍵修改 2：加上 await 等待地圖搜尋完成，並把回傳的最新名單存起來
+    const latestStores = await searchGooglePlaces(text, 'gps');
 
     try {
       const res = await fetch('/api/chat', {
@@ -468,8 +476,8 @@ export default function FullMapAIPortal() {
         body: JSON.stringify({
           prompt: text,
           petProfile: petProfile,
-          // 🌟 關鍵修復：把畫面上的店家清單傳給後端
-          contextStores: displayedStores
+          // 🌟 關鍵修改 3：直接用剛剛出爐的 latestStores！
+          contextStores: latestStores
         })
       });
 
