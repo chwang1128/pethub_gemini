@@ -31,7 +31,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ reply: "❌ 金鑰有效，但該專案下找不到任何可用的對話模型。" });
     }
 
-    const activeModel = availableModels[0]; // 自動選取例如 gemini-1.5-flash
+    const activeModel = availableModels[0]; // 自動選取例如 gemini-2.5-flash
 
     // 3. 使用抓到的可用模型發送提問
     const body = await req.json();
