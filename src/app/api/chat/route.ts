@@ -18,8 +18,8 @@ export async function POST(req: Request) {
     const { prompt, petProfile, contextStores } = body;
 
     const genAI = new GoogleGenerativeAI(apiKey);
-    // 使用目前正常營運的官方端點 gemini-2.5-flash
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
+    // 使用目前正常營運的官方端點 gemini-3.0-flash
+    const model = genAI.getGenerativeModel({ model: 'gemini-3.0-flash' });
 
     const systemPrompt = `你現在是 PetHub 的「專業寵物照護助理」。
 服務毛孩：${petProfile?.name || '毛孩'} (${petProfile?.type === 'dog' ? '狗狗' : '貓咪'})
