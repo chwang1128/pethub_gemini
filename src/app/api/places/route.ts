@@ -5,8 +5,6 @@ export async function GET(req: Request) {
   let keyword = searchParams.get('keyword') || '寵物';
   const lat = searchParams.get('lat') || '25.0330';
   const lng = searchParams.get('lng') || '121.5434';
-  
-  // 優先使用 GEMINI_API_KEY（若有專門的 GOOGLE_MAPS_API_KEY 亦可）
   const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_MAPS_API_KEY;
 
   if (!apiKey) {
@@ -14,20 +12,20 @@ export async function GET(req: Request) {
   }
 
   try {
-    // 整理關鍵字，避免出現重複搜尋詞
-    const cleanKeyword = keyword.replace(/(狗狗|貓咪)/g, '').trim() || '寵物';
-    const query = `${cleanKeyword}`;
+    // 清理搜尋關鍵字，避免長詞被 Google 拒絕
+    const cleanKeyword = keyword.replace(/(狗狗|貓咪|\?|？|請問)/g, '').trim() || '寵物友善';
 
-    // 1. 先執行地點搜尋
-    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(query)}&location=${lat},${lng}&radius=50000&language=zh-TW&key=${apiKey}`;
+    // 1. 先執行標準的地點文字搜尋 (TextSearch)
+    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(cleanKeyword)}&location=${lat},${lng}&radius=20000&language=zh-TW&key=${apiKey}`;
     const searchRes = await fetch(searchUrl);
     const searchData = await searchRes.json();
 
     if (!searchRes.ok || !searchData.results || searchData.results.length === 0) {
+      console.log("Google TextSearch 未找到店家:", searchData.status);
       return NextResponse.json({ results: [] });
     }
 
-    // 2. 為前 5 筆店家抓取詳細評論 (若 Places Details API 未開啟亦能自動容錯)
+    // 2. 安全抓取評論 (加上各自獨立 try/catch，就算抓評論失敗也絕不影響店家顯示)
     const detailedResults = await Promise.all(
       searchData.results.slice(0, 5).map(async (place: any) => {
         try {
@@ -51,7 +49,7 @@ export async function GET(req: Request) {
             realReviews
           };
         } catch (e) {
-          // 容錯備案：細節失敗時依然回傳基本的店家資訊
+          // 🛡️ 防護罩：如果抓取詳細評論被 Google 拒絕，依然正常回傳基礎店家資訊，卡片絕不消失！
           return {
             ...place,
             phone: '未提供電話',
@@ -66,6 +64,7 @@ export async function GET(req: Request) {
     return NextResponse.json({ results: detailedResults });
 
   } catch (error: any) {
+    console.error("API 發生異常:", error.message);
     return NextResponse.json({ error: error.message, results: [] }, { status: 500 });
   }
 }
