@@ -1,7 +1,7 @@
 'use client';
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  PawPrint, Sparkles, Send, MapPin, 
+  Quote, PawPrint, Sparkles, Send, MapPin, 
   X, Coins, Star, RefreshCcw, Search, ChevronRight,
   Clock, Phone, Navigation, Map, MessageCircle, Globe, ChevronUp, ChevronDown,
   Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText
