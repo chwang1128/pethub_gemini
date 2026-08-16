@@ -13,34 +13,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // 1. 向 Google REST API 查詢該 Key 目前真正支援的模型清單
-    const modelsUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-    const modelsRes = await fetch(modelsUrl);
-    const modelsData = await modelsRes.json();
+    // 直接鎖定最新的 3.0 模型，不讓系統瞎猜
+    const selectedModel = 'gemini-3.0-flash';
 
-    if (!modelsRes.ok) {
-      return NextResponse.json(
-        { reply: `❌ API 金鑰驗證失敗 (${modelsRes.status})：${modelsData.error?.message}` },
-        { status: 500 }
-      );
-    }
-
-    // 篩選出具備 generateContent 能力的模型
-    const availableModels: string[] = modelsData.models
-      ?.filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-      .map((m: any) => m.name.replace('models/', '')) || [];
-
-    if (availableModels.length === 0) {
-      return NextResponse.json(
-        { reply: "❌ 該 API Key 驗證通過，但目前無任何可用的生成對話模型。" },
-        { status: 500 }
-      );
-    }
-
-    // 自動挑選含有 'flash' 的模型；若無則自動選擇清單第一個可用模型
-    const selectedModel = availableModels.find((m) => m.includes('flash')) || availableModels[0];
-
-    // 2. 解析前端輸入
+    // 1. 解析前端輸入
     const body = await req.json();
     const { prompt, petProfile, contextStores } = body;
 
@@ -54,7 +30,7 @@ ${contextStores ? JSON.stringify(contextStores, null, 2) : '無'}
 
 請以親切專業的口吻回答問題。`;
 
-    // 3. 發送對話請求
+    // 2. 直接發送對話請求給 3.0-flash
     const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`;
     const genRes = await fetch(generateUrl, {
       method: 'POST',
@@ -70,9 +46,10 @@ ${contextStores ? JSON.stringify(contextStores, null, 2) : '無'}
 
     const genData = await genRes.json();
 
+    // 處理 Google 回傳的錯誤
     if (!genRes.ok) {
       return NextResponse.json(
-        { reply: `❌ 模型 [${selectedModel}] 生成失敗：${genData.error?.message}` },
+        { reply: `❌ 模型 [${selectedModel}] 生成失敗：${genData.error?.message || '未知錯誤'}` },
         { status: 500 }
       );
     }
