@@ -201,8 +201,6 @@ const generateDynamicAiAnalysis = (
 export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(false);
-  
-  // 🌟 新增：用來追蹤定位狀態 (載入中、成功、被拒絕)
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle');
 
   const [petProfile, setPetProfile] = useState<PetProfile>({
@@ -279,7 +277,6 @@ export default function FullMapAIPortal() {
       
       map.on('dragend', () => setShowSearchHereBtn(true));
 
-      // 🌟 啟動定位與狀態攔截
       if ('geolocation' in navigator) {
         setLocationStatus('loading');
         navigator.geolocation.getCurrentPosition(
@@ -303,7 +300,6 @@ export default function FullMapAIPortal() {
             map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
           },
           (error) => {
-            // 判斷是否為使用者手動拒絕
             if (error.code === error.PERMISSION_DENIED) {
               setLocationStatus('denied');
             } else {
@@ -365,12 +361,17 @@ export default function FullMapAIPortal() {
 
     if (displayedStores.length > 0 && !selectedDetailStore) {
       const bounds = L.latLngBounds(displayedStores.map(s => [s.lat, s.lng]));
-      if (userLocation && !showSearchHereBtn) bounds.extend([userLocation.lat, userLocation.lng]);
       mapRef.current.fitBounds(bounds, { paddingBottomRight: [10, 140], paddingTopLeft: [10, 160], maxZoom: 15 });
     }
   }, [stores, displayedStores, selectedDetailStore]);
 
-  const searchGooglePlaces = async (keyword: string, searchType: 'gps' | 'mapCenter' = 'gps') => {
+  // 🌟 加入 overrideLat 與 overrideLng，接收 AI 指令的跨區座標
+  const searchGooglePlaces = async (
+    keyword: string, 
+    searchType: 'gps' | 'mapCenter' = 'gps', 
+    overrideLat: number | null = null, 
+    overrideLng: number | null = null
+  ) => {
     setIsLoading(true);
     setShowSearchHereBtn(false);
     setLastKeyword(keyword);
@@ -378,7 +379,12 @@ export default function FullMapAIPortal() {
 
     try {
       let searchLat = 25.0330, searchLng = 121.5434;
-      if (searchType === 'mapCenter' && mapRef.current) {
+      
+      // 🌟 如果 AI 有回傳指定縣市座標，就強迫地圖以新座標為中心去搜尋！
+      if (overrideLat !== null && overrideLng !== null) {
+        searchLat = overrideLat;
+        searchLng = overrideLng;
+      } else if (searchType === 'mapCenter' && mapRef.current) {
         const center = mapRef.current.getCenter();
         searchLat = center.lat; searchLng = center.lng;
       } else if (userLocation) {
@@ -501,7 +507,12 @@ export default function FullMapAIPortal() {
         setMessages(prev => [...prev, { sender: 'ai', text: chatData.reply }]);
         
         const finalKeyword = chatData.keyword || text;
-        const latestStores = await searchGooglePlaces(finalKeyword, 'gps');
+        
+        // 🌟 關鍵：將 AI 給的目標地點座標傳給搜尋系統
+        const targetLat = chatData.targetLocation?.lat || null;
+        const targetLng = chatData.targetLocation?.lng || null;
+        
+        const latestStores = await searchGooglePlaces(finalKeyword, 'gps', targetLat, targetLng);
 
         const evalRes = await fetch('/api/chat', {
           method: 'POST',
