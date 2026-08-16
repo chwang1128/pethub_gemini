@@ -7,28 +7,52 @@ export async function POST(req: Request) {
     const apiKey = process.env.GEMINI_API_KEY;
 
     if (!apiKey) {
-      return NextResponse.json({ reply: "❌ 尚未設定 API Key" }); // 回傳 200 讓前端印出來
+      return NextResponse.json({ reply: "❌ Vercel 尚未設定 GEMINI_API_KEY 環境變數。" });
     }
 
-    // 直接向 Google 查詢此 Key 支援的模型清單
-    const modelsUrl = `https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`;
-    const modelsRes = await fetch(modelsUrl);
-    const modelsData = await modelsRes.json();
+    // 🎯 直接鎖定清單中最新且穩定的版本
+    const selectedModel = 'gemini-3.7-flash';
 
-    if (!modelsRes.ok) {
+    // 1. 解析前端輸入
+    const body = await req.json();
+    const { prompt, petProfile, contextStores } = body;
+
+    const systemPrompt = `你現在是 PetHub 的「專業寵物照護助理」。
+服務毛孩：${petProfile?.name || '毛孩'} (${petProfile?.type === 'dog' ? '狗狗' : '貓咪'})
+品種：${petProfile?.breed || '未填寫'}
+特別註記：${petProfile?.notes || '無'}
+
+周邊店家資訊：
+${contextStores ? JSON.stringify(contextStores, null, 2) : '無'}
+
+請以親切專業的口吻回答問題。`;
+
+    // 2. 發送正式對話請求
+    const generateUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`;
+    const genRes = await fetch(generateUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [
+          {
+            parts: [{ text: `${systemPrompt}\n\n家長提問：${prompt || '你好'}` }],
+          },
+        ],
+      }),
+    });
+
+    const genData = await genRes.json();
+
+    // 處理 Google 回傳的錯誤（直接顯示在對話框）
+    if (!genRes.ok) {
       return NextResponse.json({ 
-        reply: `❌ 查詢清單失敗：${modelsData.error?.message}` 
+        reply: `❌ 模型 [${selectedModel}] 生成失敗：${genData.error?.message || '未知錯誤'}` 
       });
     }
 
-    // 篩選出具備對話生成能力的模型
-    const availableModels = modelsData.models
-      ?.filter((m: any) => m.supportedGenerationMethods?.includes('generateContent'))
-      .map((m: any) => m.name.replace('models/', '')) || [];
+    const replyText = genData.candidates?.[0]?.content?.parts?.[0]?.text || "無回應內容";
 
-    // 把清單直接作為「AI 的回覆」送回前端畫面！
-    const replyText = `✅ 成功抓取可用模型清單！您目前可用的模型代號如下：\n\n${availableModels.join('\n')}\n\n👉 請從上方挑選一個最新的模型（例如含有 pro 或最新 flash 版本的代號），我們再來放進正式程式碼中。`;
-
+    // 3. 成功回傳 AI 生成的內容
     return NextResponse.json({
       reply: replyText,
       text: replyText
@@ -36,7 +60,7 @@ export async function POST(req: Request) {
 
   } catch (error: any) {
     return NextResponse.json({ 
-      reply: `❌ 伺服器捕捉到異常：${error?.message}` 
+      reply: `❌ 伺服器捕捉到異常：${error?.message || '未知錯誤'}` 
     });
   }
 }
