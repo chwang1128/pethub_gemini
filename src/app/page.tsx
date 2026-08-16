@@ -202,6 +202,9 @@ export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(false);
   
+  // 🌟 新增：用來追蹤定位狀態 (載入中、成功、被拒絕)
+  const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle');
+
   const [petProfile, setPetProfile] = useState<PetProfile>({
     name: '波波',
     type: 'dog',
@@ -276,9 +279,12 @@ export default function FullMapAIPortal() {
       
       map.on('dragend', () => setShowSearchHereBtn(true));
 
+      // 🌟 啟動定位與狀態攔截
       if ('geolocation' in navigator) {
+        setLocationStatus('loading');
         navigator.geolocation.getCurrentPosition(
           (position) => {
+            setLocationStatus('success');
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
             setUserLocation({ lat, lng });
@@ -297,10 +303,18 @@ export default function FullMapAIPortal() {
             map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
           },
           (error) => {
+            // 判斷是否為使用者手動拒絕
+            if (error.code === error.PERMISSION_DENIED) {
+              setLocationStatus('denied');
+            } else {
+              setLocationStatus('error');
+            }
             setMessages(prev => [...prev, { sender: 'ai', text: '⚠️ 定位存取失敗，已為您預設於台北市中心。' }]);
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
+      } else {
+        setLocationStatus('error');
       }
     };
     document.body.appendChild(script);
@@ -455,80 +469,66 @@ export default function FullMapAIPortal() {
     }
   };
 
-  // 🌟 進階雙重通訊入口：需求釐清 ➡️ 搜尋 ➡️ 最終評估與卡片聯動
   const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || inputQuery;
     if (!text.trim()) return;
 
-    // 將新訊息加入畫面與歷史陣列
     const newHistory = [...messages, { sender: 'user' as const, text }];
     setMessages(newHistory);
     setInputQuery('');
     setIsAiTyping(true);
 
     try {
-      // 🚀【階段一：傳給 AI 釐清需求】（此時不用帶店家資料）
       const chatRes = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: text,
           petProfile: petProfile,
-          // 擷取之前的對話紀錄給 AI
           history: newHistory.slice(1).map(m => ({ 
             role: m.sender === 'ai' ? 'model' : 'user', 
             content: m.text 
           })),
-          isEvaluationPhase: false // 標記為：釐清階段
+          isEvaluationPhase: false
         })
       });
 
       const chatData = await chatRes.json();
 
       if (chatData.action === 'chat') {
-        // 💬 狀況 A：AI 覺得資訊不足，對你發出提問
         setMessages(prev => [...prev, { sender: 'ai', text: chatData.reply }]);
-      
       } else if (chatData.action === 'search') {
-        // 🔍 狀況 B：AI 覺得資訊夠了，下令開始搜尋
         setMessages(prev => [...prev, { sender: 'ai', text: chatData.reply }]);
         
-        // 呼叫地圖搜尋，使用 AI 總結出來的最精準 keyword
         const finalKeyword = chatData.keyword || text;
         const latestStores = await searchGooglePlaces(finalKeyword, 'gps');
 
-        // 🚀【階段二：將剛找出的店家名單送給 AI 做最後評估篩選】
         const evalRes = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             prompt: text,
             petProfile: petProfile,
-            // 讓 AI 記得剛才的對話與安撫語
             history: [...newHistory.slice(1), { sender: 'ai', text: chatData.reply }].map(m => ({ 
               role: m.sender === 'ai' ? 'model' : 'user', 
               content: m.text 
             })),
             contextStores: latestStores,
-            isEvaluationPhase: true // 標記為：評估階段
+            isEvaluationPhase: true
           })
         });
 
         const evalData = await evalRes.json();
         
         if (evalData.reply) {
-          // 印出 AI 的最終推薦理由
           setMessages(prev => [...prev, { sender: 'ai', text: evalData.reply }]);
           
-          // 🌟 最終殺招：聯動卡片隱藏邏輯
           if (evalData.recommendedIds && Array.isArray(evalData.recommendedIds)) {
             if (evalData.recommendedIds.length > 0) {
               setDisplayedStores(prevStores => 
-                // 只留下 ID 在 AI 推薦名單內的店家卡片
                 prevStores.filter(store => evalData.recommendedIds.includes(store.id))
               );
             } else {
-               // 如果 AI 一個都不推薦，就把卡片清空
                setDisplayedStores([]);
             }
           }
@@ -1209,6 +1209,42 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
+      {/* 定位載入中 UI */}
+      {locationStatus === 'loading' && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#FAF6F0]/80 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 shadow-xl flex flex-col items-center max-w-xs text-center border border-[#E8DFD8]">
+            <div className="w-16 h-16 mb-4 animate-bounce">
+              <span className="text-5xl">🛰️</span>
+            </div>
+            <h3 className="text-[#38312D] font-black text-lg mb-2">正在與外太空連線...</h3>
+            <p className="text-[#6E5A4D] text-sm font-bold leading-relaxed">
+              正在為您定位中！請稍候，我們保證沒有被外星人綁架 👽
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 定位被拒絕 UI */}
+      {locationStatus === 'denied' && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center max-w-sm text-center border border-[#E8DFD8]">
+            <div className="w-16 h-16 mb-4 bg-rose-100 rounded-full flex items-center justify-center">
+              <span className="text-3xl">🐶</span>
+            </div>
+            <h3 className="text-[#38312D] font-black text-xl mb-2">我們迷路了！</h3>
+            <p className="text-[#6E5A4D] text-sm font-medium leading-relaxed mb-6">
+              沒有您的位置，系統會像迷路的小狗一樣不知所措。<br/><br/>
+              為了給您最精準的周邊推薦，強烈建議您至瀏覽器設定中<b>「允許存取位置」</b>，然後重新整理網頁喔！
+            </p>
+            <button 
+              onClick={() => setLocationStatus('error')}
+              className="w-full bg-[#B88746] hover:bg-[#A67C52] text-white font-black py-3 rounded-2xl transition-all active:scale-95"
+            >
+              好，我知道了
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
