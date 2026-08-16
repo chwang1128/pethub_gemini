@@ -33,7 +33,7 @@ export async function POST(req: Request) {
 
     // 3. 初始化 SDK 與模型
     const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     // 4. 設計「系統提示詞 (System Prompt)」讓 Gemini 扮演 PetHub 助理
     const systemPrompt = `你現在是 PetHub 的「專業寵物照護助理」。
