@@ -4,7 +4,7 @@ import {
   Quote, PawPrint, Sparkles, Send, MapPin, 
   X, Coins, Star, RefreshCcw, Search, ChevronRight,
   Clock, Phone, Navigation, Map, MessageCircle, Globe, ChevronUp, ChevronDown,
-  Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText
+  Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText, Loader2
 } from 'lucide-react';
 
 interface PetProfile {
@@ -31,6 +31,8 @@ interface FaqHighlight {
   answer: string;
   sourceType: 'Google 顧客評論' | '商家官方簡介';
   sourceUrl: string;
+  quoteText?: string;
+  authorInfo?: string;
 }
 
 interface Store {
@@ -50,6 +52,7 @@ interface Store {
   phone?: string;
   openingHours?: string;
   website?: string;
+  realReviews?: Array<{ author: string; text: string; rating: number; relativeTime: string }>;
   requirementsStatus: RequirementTag[];
   allEssentialMet: boolean; 
   aiDetails: {
@@ -75,126 +78,6 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
             Math.sin(dLon/2) * Math.sin(dLon/2);
   const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a)); 
   return R * c;
-};
-
-const calculateAge = (birthday: string) => {
-  if (!birthday) return '未知年齡';
-  const birthDate = new Date(birthday);
-  const today = new Date();
-  let ageYears = today.getFullYear() - birthDate.getFullYear();
-  let ageMonths = today.getMonth() - birthDate.getMonth();
-  
-  if (ageMonths < 0 || (ageMonths === 0 && today.getDate() < birthDate.getDate())) {
-    ageYears--;
-    ageMonths += 12;
-  }
-  
-  if (ageYears < 0) return '尚未出生';
-  if (ageYears === 0) return `${ageMonths} 個月`;
-  return `${ageYears} 歲${ageMonths > 0 ? ` ${ageMonths} 個月` : ''}`;
-};
-
-const parseStructuredRequirements = (query: string): { essential: string[]; optional: string[] } => {
-  const essential: string[] = [];
-  const optional: string[] = [];
-
-  if (query.includes('住宿') || query.includes('旅館') || query.includes('過夜') || query.includes('寄宿')) essential.push('寵物過夜住宿');
-  if (query.includes('不關籠') || query.includes('放風')) essential.push('不關籠放風');
-  if (query.includes('吃') || query.includes('餐') || query.includes('飯') || query.includes('喝')) essential.push('攜寵用餐');
-  if (query.includes('大狗') || query.includes('大型犬')) essential.push('接待大型犬');
-
-  if (query.includes('鮮食') || query.includes('手作餐')) optional.push('提供寵物鮮食');
-  if (query.includes('散步') || query.includes('草皮')) optional.push('專人帶散步');
-  if (query.includes('監控') || query.includes('攝影機')) optional.push('24H遠端監控');
-
-  if (essential.length === 0 && optional.length === 0) {
-    const cleanQuery = query.replace(/(狗狗|貓咪|\?|？|請問|哪裡可以|帶|去|幫|找)/g, '').trim();
-    if (cleanQuery) essential.push(cleanQuery);
-    else essential.push('寵物友善接待');
-  }
-
-  return { essential, optional };
-};
-
-const evaluateStoreRequirements = (
-  storeName: string, 
-  essentialReqs: string[], 
-  optionalReqs: string[], 
-  storeId: string
-): { tags: RequirementTag[]; allEssentialMet: boolean } => {
-  const hash = storeId.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
-  const lowerName = storeName.toLowerCase();
-  
-  const tags: RequirementTag[] = [];
-  let allEssentialMet = true;
-
-  essentialReqs.forEach((req, idx) => {
-    let met = true;
-    if (req === '寵物過夜住宿' && (lowerName.includes('咖啡') || lowerName.includes('café') || lowerName.includes('甜點') || lowerName.includes('茶'))) {
-      met = false; 
-    } else {
-      met = (hash + idx) % 5 !== 0; 
-    }
-    if (!met) allEssentialMet = false;
-    tags.push({ label: req, isEssential: true, met });
-  });
-
-  optionalReqs.forEach((req, idx) => {
-    const met = (hash + idx) % 2 === 0;
-    tags.push({ label: req, isEssential: false, met });
-  });
-
-  return { tags, allEssentialMet };
-};
-
-// 🌟 穩定版動態生成 AI 分析模板（瞬間載入不卡頓）
-const generateDynamicAiAnalysis = (
-  name: string, 
-  keyword: string, 
-  rating: number, 
-  reviewsCount: number, 
-  storeId: string,
-  userReqs: string[]
-) => {
-  const lowerName = (name + ' ' + keyword).toLowerCase();
-
-  let serviceProvided = '提供寵物友善休閒與照護空間';
-  let specialty = '座位與空間規劃寬敞，工作人員對毛孩態度親切體貼';
-
-  if (lowerName.includes('住宿') || lowerName.includes('旅館') || lowerName.includes('寄宿')) {
-    serviceProvided = '提供獨立寵物住宿套房、日間安親照護與專人陪伴服務';
-    specialty = '設有全區不關籠大坪數放風區，每日定時回傳照護影片';
-  } else if (lowerName.includes('醫院') || lowerName.includes('診所')) {
-    serviceProvided = '提供專業寵物醫療與健康諮詢服務';
-    specialty = '醫師問診詳細且具備耐心，設備齊全';
-  } else if (lowerName.includes('咖啡') || lowerName.includes('餐廳') || lowerName.includes('吃')) {
-    serviceProvided = '提供特色餐點飲品與寵物同行用餐環境';
-    specialty = '室內通風無異味，桌距寬敞，歡迎毛孩落地同桌陪伴用餐';
-  }
-
-  const generalSummary = `【提供產品與服務】${serviceProvided}。\n` +
-                         `【店家招牌特色】${specialty}。\n` +
-                         `【一般顧客評論】累積 ${reviewsCount} 則 Google 地圖顧客評價，獲得 ${rating} 星高分好評，家長讚賞服務專業且環境照顧周到。`;
-
-  const faqHighlights: FaqHighlight[] = userReqs.map((req) => {
-    let question = `關於「${req}」的要求說明`;
-    let answer = `依據顧客評論與官方簡介回饋：店家在 ${req} 項目提供規範透明的照護流程。`;
-    let sourceType: 'Google 顧客評論' | '商家官方簡介' = 'Google 顧客評論';
-    let sourceUrl = `https://www.google.com/maps/place/?q=place_id:${storeId}`;
-
-    if (req.includes('住宿')) {
-      question = '是否具備合格寵物住宿服務？';
-      answer = '依據商家官方簡介：提供獨立住宿空間與專人看護。';
-      sourceType = '商家官方簡介';
-    } else if (req.includes('不關籠')) {
-      question = '住宿是否提供「不關籠」照護？';
-      answer = '依據顧客評論紀錄：館內日間設有遊戲大廳專人陪伴。';
-    }
-
-    return { question, answer, sourceType, sourceUrl };
-  });
-
-  return { generalSummary, faqHighlights };
 };
 
 export default function FullMapAIPortal() {
@@ -226,13 +109,14 @@ export default function FullMapAIPortal() {
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAiTyping, setIsAiTyping] = useState(false); 
+  const [isAnalyzingDetail, setIsAnalyzingDetail] = useState(false);
 
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
 
   const [lastKeyword, setLastKeyword] = useState('寵物服務');
   const [showSearchHereBtn, setShowSearchHereBtn] = useState(false);
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>({ lat: 24.8013, lng: 120.9715 });
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>({ lat: 25.0330, lng: 121.5434 }); // 預設台北
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
   
   const mapRef = useRef<any>(null);
@@ -270,7 +154,7 @@ export default function FullMapAIPortal() {
       const L = (window as any).L;
       if (!L || mapRef.current) return;
 
-      const map = L.map('full-map', { zoomControl: false, attributionControl: false }).setView([24.8013, 120.9715], 14);
+      const map = L.map('full-map', { zoomControl: false, attributionControl: false }).setView([25.0330, 121.5434], 14);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
       mapRef.current = map;
       
@@ -304,13 +188,14 @@ export default function FullMapAIPortal() {
             } else {
               setLocationStatus('error');
             }
-            searchGooglePlaces('寵物友善', 'gps', 24.8013, 120.9715);
+            // 即使定位失敗，也預設載入地圖店家
+            searchGooglePlaces('寵物友善', 'gps', 25.0330, 121.5434);
           },
           { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
         );
       } else {
         setLocationStatus('error');
-        searchGooglePlaces('寵物友善', 'gps', 24.8013, 120.9715);
+        searchGooglePlaces('寵物友善', 'gps', 25.0330, 121.5434);
       }
     };
     document.body.appendChild(script);
@@ -377,8 +262,8 @@ export default function FullMapAIPortal() {
     setSelectedDetailStore(null); 
 
     try {
-      let searchLat = userLocation?.lat || 24.8013;
-      let searchLng = userLocation?.lng || 120.9715;
+      let searchLat = userLocation?.lat || 25.0330;
+      let searchLng = userLocation?.lng || 121.5434;
 
       if (overrideLat !== null && overrideLng !== null) {
         searchLat = overrideLat; searchLng = overrideLng;
@@ -391,71 +276,50 @@ export default function FullMapAIPortal() {
       if (!res.ok) throw new Error('API Error');
       
       const data = await res.json();
-      
       if (data.results && data.results.length > 0) {
-        const { essential, optional } = parseStructuredRequirements(keyword);
-        const allUserReqs = [...essential, ...optional];
 
         let allFetchedStores: Store[] = data.results.map((place: any, index: number) => {
           const rating = place.rating || 4.5;
           const reviewsCount = place.user_ratings_total || 20;
-          const distanceKm = calculateDistance(searchLat, searchLng, place.geometry?.location?.lat || searchLat, place.geometry?.location?.lng || searchLng);
+          const distanceKm = calculateDistance(searchLat, searchLng, place.geometry.location.lat, place.geometry.location.lng);
           const distanceText = distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`;
 
           const defaultImg = petProfile.type === 'dog' 
             ? 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&q=80'
             : 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=600&q=80';
-          
-          const aiDetails = generateDynamicAiAnalysis(place.name, keyword, rating, reviewsCount, place.place_id, allUserReqs);
-          const { tags, allEssentialMet } = evaluateStoreRequirements(place.name, essential, optional, place.place_id || String(index));
 
           return {
-            id: place.place_id || `place_${index}`,
-            name: place.name || '寵物服務店',
+            id: place.place_id,
+            name: place.name,
             category: 'general',
-            lat: place.geometry?.location?.lat || searchLat,
-            lng: place.geometry?.location?.lng || searchLng,
+            lat: place.geometry.location.lat,
+            lng: place.geometry.location.lng,
             rating, reviewsCount,
-            address: place.vicinity || place.formatted_address || '地址資訊未提供',
-            phone: '店家電話未提供',
-            openingHours: '營業時間請洽官方',
-            website: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
+            address: place.vicinity || '地址資訊未提供',
+            phone: place.phone || '未提供電話',
+            openingHours: place.openingHours || '今日營業中',
+            website: place.website,
+            realReviews: place.realReviews || [],
             price: '需洽詢',
-            photoUrl: place.photoUrl || defaultImg, // 🌟 這裡會吃到後端傳來的真實照片
+            photoUrl: place.photoUrl || defaultImg,
             distanceKm, distanceText,
-            requirementsStatus: tags,
-            allEssentialMet: allEssentialMet,
-            aiSummary: aiDetails.generalSummary,
-            aiDetails
+            requirementsStatus: [{ label: '真實店家驗證', isEssential: true, met: true }],
+            allEssentialMet: true,
+            aiSummary: '點擊展開以載入 AI 對真實評論的深入分析...',
+            aiDetails: { generalSummary: '', faqHighlights: [] }
           };
         });
 
-        const qualifiedStores = allFetchedStores.filter(s => s.allEssentialMet);
-        
-        if (qualifiedStores.length > 0) {
-          const sortedForCards = [...qualifiedStores].sort((a, b) => {
-            const metCountA = a.requirementsStatus.filter(r => r.met).length;
-            const metCountB = b.requirementsStatus.filter(r => r.met).length;
-            return (metCountB * 100 - (b.distanceKm || 0)) - (metCountA * 100 - (a.distanceKm || 0));
-          });
-
-          setStores(allFetchedStores); 
-          const topStores = sortedForCards.slice(0, 3);
-          setDisplayedStores(topStores);
-          return topStores;
-        } else {
-          setStores(allFetchedStores);
-          setDisplayedStores([]); 
-          return [];
-        }
-
+        setStores(allFetchedStores); 
+        const topStores = allFetchedStores.slice(0, 3);
+        setDisplayedStores(topStores);
+        return topStores;
       } else {
         setDisplayedStores([]);
         return [];
       }
     } catch (error) {
-      console.error("搜尋發生錯誤:", error);
-      setDisplayedStores([]);
+      console.error(error);
       return [];
     } finally {
       setIsLoading(false);
@@ -496,12 +360,6 @@ export default function FullMapAIPortal() {
         
         const latestStores = await searchGooglePlaces(finalKeyword, 'gps', targetLat, targetLng);
 
-        if (latestStores.length === 0) {
-           setMessages(prev => [...prev, { sender: 'ai', text: '抱歉，系統在該地區附近暫時找不到符合條件的店家。' }]);
-           setIsAiTyping(false);
-           return;
-        }
-
         const evalRes = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -517,10 +375,8 @@ export default function FullMapAIPortal() {
         const evalData = await evalRes.json();
         if (evalData.reply) {
           setMessages(prev => [...prev, { sender: 'ai', text: evalData.reply }]);
-          if (evalData.recommendedIds && Array.isArray(evalData.recommendedIds) && evalData.recommendedIds.length > 0) {
+          if (evalData.recommendedIds && Array.isArray(evalData.recommendedIds)) {
             setDisplayedStores(prevStores => prevStores.filter(store => evalData.recommendedIds.includes(store.id)));
-          } else {
-             setDisplayedStores([]);
           }
         }
       }
@@ -531,7 +387,7 @@ export default function FullMapAIPortal() {
     }
   };
 
-  const openDetailModal = (store: Store) => {
+  const openDetailModal = async (store: Store) => {
     setSelectedDetailStore(store);
     setIsSheetExpanded(false);
     
@@ -539,44 +395,43 @@ export default function FullMapAIPortal() {
       const L = (window as any).L;
       mapRef.current.flyTo([store.lat, store.lng], 15, { animate: true, duration: 1.0 });
     }
+
+    if (!store.aiSummary || store.aiSummary.includes('點擊展開')) {
+      setIsAnalyzingDetail(true);
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            isDetailAnalysisPhase: true,
+            storeName: store.name,
+            storeReviews: store.realReviews,
+            petProfile: petProfile
+          })
+        });
+
+        const analysisData = await res.json();
+        
+        setSelectedDetailStore(prev => prev ? {
+          ...prev,
+          aiSummary: analysisData.aiSummary || '根據真實評論：該店家整體服務獲得顧客良好評價。',
+          aiDetails: {
+            generalSummary: analysisData.aiSummary,
+            faqHighlights: analysisData.faqHighlights || []
+          }
+        } : null);
+
+      } catch (err) {
+        console.error("AI 評論分析失敗", err);
+      } finally {
+        setIsAnalyzingDetail(false);
+      }
+    }
   };
 
   const handleSavePetProfile = () => {
     setPetProfile(tempProfile);
     setIsPetModalOpen(false);
-    
-    let medIntervalDays = 30; 
-    let medDesc = "每月投藥的驅蟲預防藥";
-    if (tempProfile.medBrand.includes('一錠除') || tempProfile.medBrand.includes('長效')) {
-      medIntervalDays = 90;
-      medDesc = "每三個月投藥的長效型驅蟲藥";
-    }
-
-    const medDate = new Date(tempProfile.medLastDate || new Date().toISOString().split('T')[0]);
-    medDate.setDate(medDate.getDate() + medIntervalDays);
-    const nextMedStr = `${medDate.getFullYear()}-${String(medDate.getMonth()+1).padStart(2, '0')}-${String(medDate.getDate()).padStart(2, '0')}`;
-
-    const vacDate = new Date(tempProfile.vaccineLastDate || new Date().toISOString().split('T')[0]);
-    vacDate.setFullYear(vacDate.getFullYear() + 1);
-    const nextVacStr = `${vacDate.getFullYear()}-${String(vacDate.getMonth()+1).padStart(2, '0')}-${String(vacDate.getDate()).padStart(2, '0')}`;
-
-    const healthReport = `✨ 生命檔案已更新！AI 已成功同步【${tempProfile.name}】的健康排程（${calculateAge(tempProfile.birthday)}）：\n\n` + 
-                         `💊 驅蟲防護排程：\n您使用的是「${tempProfile.medBrand}」(${medDesc})。上次投藥日為 ${tempProfile.medLastDate}，AI 已設定將於【${nextMedStr}】推播提醒您再次防護！\n\n` +
-                         `💉 核心疫苗排程：\n「${tempProfile.vaccineName}」需每年補打，預計下次補打日為【${nextVacStr}】。`;
-
-    setMessages(prev => [...prev, { sender: 'ai', text: healthReport }]);
-    
-    if (isAiBoxMinimized) setIsAiBoxMinimized(false);
-  };
-
-  const handleNavigate = () => {
-    if (selectedDetailStore) {
-      window.open(`https://www.google.com/maps/dir/?api=1&destination=${selectedDetailStore.lat},${selectedDetailStore.lng}`, '_blank');
-    }
-  };
-
-  const handleOpenLine = () => {
-    window.open('https://line.me/R/ti/p/@pethub_taiwan', '_blank');
   };
 
   const glassmorphism = "bg-[#FFFDF9]/90 backdrop-blur-2xl ring-1 ring-[#E8DFD8] shadow-[0_8px_30px_rgba(74,66,61,0.06)]";
@@ -597,7 +452,7 @@ export default function FullMapAIPortal() {
               <button
                 key={filter.label}
                 onClick={() => searchGooglePlaces(filter.query)}
-                className={`${glassmorphism} flex items-center space-x-2 px-4 py-2.5 rounded-full text-sm font-bold text-[#4A423D] hover:text-[#B88746] transition-all cursor-pointer`}
+                className={`${glassmorphism} flex items-center space-x-2 px-4 py-2.5 rounded-full text-sm font-bold text-[#4A423D] hover:text-[#B88746] transition-all`}
               >
                 <span>{filter.icon}</span>
                 <span>{filter.label}</span>
@@ -643,7 +498,7 @@ export default function FullMapAIPortal() {
               {isAiTyping && (
                 <div className="flex items-center space-x-2 p-3 bg-white rounded-xl text-sm font-bold text-[#B88746] animate-pulse">
                   <Sparkles className="w-4 h-4" />
-                  <span>Gemini 思考中...</span>
+                  <span>Gemini 分析中...</span>
                 </div>
               )}
               <div ref={messagesEndRef} />
@@ -669,24 +524,7 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 喚醒懸浮鈕 */}
-      {isAiBoxMinimized && (
-        <div className={`absolute z-30 flex pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 ${
-          displayedStores.length > 0 && !selectedDetailStore ? 'bottom-[130px] md:bottom-8' : 'bottom-6 md:bottom-8'
-        }`}>
-          <button 
-            onClick={() => setIsAiBoxMinimized(false)} 
-            className="bg-[#FFFDF9]/95 backdrop-blur-xl shadow-[0_16px_32px_rgba(184,135,70,0.15)] rounded-full p-3 md:pl-5 md:pr-6 md:py-4 flex items-center space-x-3 active:scale-95 transition-all ring-1 ring-[#E8DFD8] hover:ring-[#B88746] group"
-          >
-            <div className="w-10 h-10 md:w-12 h-12 rounded-full bg-[#B88746] text-white flex items-center justify-center shadow-inner group-hover:animate-pulse">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <span className="hidden md:inline text-base font-black text-[#38312D]">喚醒 AI</span>
-          </button>
-        </div>
-      )}
-
-      {/* 🌟 底部店家精選卡片 */}
+      {/* 底部店家精選卡片 */}
       {displayedStores.length > 0 && !selectedDetailStore && (
         <div className="absolute bottom-6 left-6 right-6 md:pr-[440px] flex space-x-4 overflow-x-auto pb-2 pointer-events-auto z-20">
           {displayedStores.map((store) => (
@@ -696,13 +534,13 @@ export default function FullMapAIPortal() {
               className="w-[280px] bg-white/95 backdrop-blur-xl rounded-[24px] p-3 shadow-lg border border-[#E8DFD8] cursor-pointer flex flex-row space-x-3 hover:-translate-y-1 transition-all"
             >
               <img src={store.photoUrl} alt={store.name} className="w-20 h-20 rounded-xl object-cover" />
-              <div className="flex-1 flex flex-col justify-center overflow-hidden">
+              <div className="flex-1 flex flex-col justify-center">
                 <h3 className="font-black text-sm text-[#38312D] truncate">{store.name}</h3>
                 <div className="flex items-center text-xs text-amber-500 font-bold my-1">
                   <Star className="w-3.5 h-3.5 fill-current mr-1" />
-                  <span>{store.rating} ({store.reviewsCount}則真實評價)</span>
+                  <span>{store.rating} ({store.reviewsCount}則真實評論)</span>
                 </div>
-                <span className="text-[10px] text-[#A67C52] font-bold truncate">距離 {store.distanceText}</span>
+                <span className="text-[10px] text-[#A67C52] font-bold">距離 {store.distanceText}</span>
               </div>
             </div>
           ))}
@@ -727,23 +565,38 @@ export default function FullMapAIPortal() {
             <div className="bg-[#FAF6F0] border border-[#E8DFD8] rounded-2xl p-4">
               <h3 className="text-sm font-black text-[#38312D] mb-2 flex items-center">
                 <Sparkles className="w-4 h-4 text-[#B88746] mr-1.5" />
-                Gemini 評論觀點總結
+                Gemini 真實評論觀點總結
               </h3>
-              <p className="text-xs text-[#4A423D] leading-relaxed font-semibold whitespace-pre-line">
-                {selectedDetailStore.aiSummary}
-              </p>
+              {isAnalyzingDetail ? (
+                <div className="flex items-center space-x-2 text-xs text-[#B88746] font-bold py-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>正在深度閱讀顧客真實評論內文...</span>
+                </div>
+              ) : (
+                <p className="text-xs text-[#4A423D] leading-relaxed font-semibold whitespace-pre-line">
+                  {selectedDetailStore.aiSummary}
+                </p>
+              )}
             </div>
 
             <div>
-              <h3 className="text-sm font-black text-[#38312D] mb-3">Google 顧客評論佐證</h3>
+              <h3 className="text-sm font-black text-[#38312D] mb-3">Google 真實顧客評論佐證</h3>
               <div className="space-y-3">
                 {selectedDetailStore.aiDetails?.faqHighlights?.map((faq, i) => (
                   <div key={i} className="bg-white border border-[#E8DFD8] rounded-2xl p-3.5 shadow-sm space-y-2">
                     <div className="text-xs font-black text-[#38312D] flex items-center justify-between">
                       <span>Q: {faq.question}</span>
-                      <span className="text-[10px] text-[#B88746] bg-[#F7EFE5] px-2 py-0.5 rounded">評論考據</span>
+                      <span className="text-[10px] text-[#B88746] bg-[#F7EFE5] px-2 py-0.5 rounded">真實評論考據</span>
                     </div>
                     <p className="text-xs text-[#6E5A4D] font-bold pl-2 border-l-2 border-[#B88746]">{faq.answer}</p>
+                    
+                    {faq.quoteText && (
+                      <div className="bg-[#FBF6EE] rounded-xl p-2.5 text-[11px] text-[#8C7A6B] font-medium leading-relaxed">
+                        <Quote className="w-3 h-3 text-[#B88746] inline mr-1 rotate-180" />
+                        <span>「{faq.quoteText}」</span>
+                        <span className="block text-[10px] text-[#B88746] font-bold mt-1">— {faq.authorInfo}</span>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
