@@ -1,0 +1,96 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum PetType {
+  DOG
+  CAT
+}
+
+enum Role {
+  PET_OWNER
+  MERCHANT
+  ADMIN
+}
+
+model User {
+  id            String         @id @default(uuid())
+  email         String         @unique
+  name          String?
+  avatar        String?
+  role          Role           @default(PET_OWNER)
+  points        Int            @default(2000)
+  pets          Pet[]
+  merchant      Merchant?
+  appointments  Appointment[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Pet {
+  id            String         @id @default(uuid())
+  ownerId       String
+  owner         User           @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name          String
+  type          PetType
+  breed         String?
+  ageYears      Int?
+  weightKg      Float?
+  avatar        String?
+  vaccines      VaccineRecord[]
+  createdAt     DateTime       @default(now())
+}
+
+model VaccineRecord {
+  id            String         @id @default(uuid())
+  petId         String
+  pet           Pet            @relation(fields: [petId], references: [id], onDelete: Cascade)
+  vaccineName   String
+  administeredAt DateTime
+  nextDueDate   DateTime
+  isNotified    Boolean        @default(false)
+}
+
+model Merchant {
+  id            String         @id @default(uuid())
+  ownerId       String         @unique
+  owner         User           @relation(fields: [ownerId], references: [id])
+  name          String
+  category      String
+  address       String
+  latitude      Float
+  longitude     Float
+  rating        Float          @default(5.0)
+  reviewCount   Int            @default(0)
+  coverImage    String?
+  services      Service[]
+  appointments  Appointment[]
+  createdAt     DateTime       @default(now())
+}
+
+model Service {
+  id            String         @id @default(uuid())
+  merchantId    String
+  merchant      Merchant       @relation(fields: [merchantId], references: [id], onDelete: Cascade)
+  title         String
+  durationMin   Int
+  price         Float
+}
+
+model Appointment {
+  id            String         @id @default(uuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  merchantId    String
+  merchant      Merchant       @relation(fields: [merchantId], references: [id])
+  scheduledAt   DateTime
+  status        String         @default("CONFIRMED")
+  pointsUsed    Int            @default(0)
+  totalPrice    Float
+  createdAt     DateTime       @default(now())
+}
