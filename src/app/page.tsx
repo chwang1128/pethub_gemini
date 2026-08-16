@@ -80,28 +80,9 @@ const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: numbe
   return R * c;
 };
 
-const calculateAge = (birthday: string) => {
-  if (!birthday) return '未知年齡';
-  const birthDate = new Date(birthday);
-  const today = new Date();
-  let ageYears = today.getFullYear() - birthDate.getFullYear();
-  let ageMonths = today.getMonth() - birthDate.getMonth();
-  
-  if (ageMonths < 0 || (ageMonths === 0 && today.getDate() < birthDate.getDate())) {
-    ageYears--;
-    ageMonths += 12;
-  }
-  
-  if (ageYears < 0) return '尚未出生';
-  if (ageYears === 0) return `${ageMonths} 個月`;
-  return `${ageYears} 歲${ageMonths > 0 ? ` ${ageMonths} 個月` : ''}`;
-};
-
 export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(false);
-  
-  // 🌟 定位狀態 (載入中、成功、被拒絕)
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle');
 
   const [petProfile, setPetProfile] = useState<PetProfile>({
@@ -135,7 +116,7 @@ export default function FullMapAIPortal() {
 
   const [lastKeyword, setLastKeyword] = useState('寵物服務');
   const [showSearchHereBtn, setShowSearchHereBtn] = useState(false);
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>({ lat: 25.0330, lng: 121.5434 }); // 預設台北
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
   
   const mapRef = useRef<any>(null);
@@ -179,7 +160,6 @@ export default function FullMapAIPortal() {
       
       map.on('dragend', () => setShowSearchHereBtn(true));
 
-      // 🌟 啟動定位並觸發「連線外太空」彈窗
       if ('geolocation' in navigator) {
         setLocationStatus('loading');
         navigator.geolocation.getCurrentPosition(
@@ -208,12 +188,14 @@ export default function FullMapAIPortal() {
             } else {
               setLocationStatus('error');
             }
-            setMessages(prev => [...prev, { sender: 'ai', text: '⚠️ 定位存取失敗，已為您預設於台北市中心。' }]);
+            // 即使定位失敗，也預設載入地圖店家
+            searchGooglePlaces('寵物友善', 'gps', 25.0330, 121.5434);
           },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
         );
       } else {
         setLocationStatus('error');
+        searchGooglePlaces('寵物友善', 'gps', 25.0330, 121.5434);
       }
     };
     document.body.appendChild(script);
@@ -280,19 +262,17 @@ export default function FullMapAIPortal() {
     setSelectedDetailStore(null); 
 
     try {
-      let searchLat = 25.0330, searchLng = 121.5434;
+      let searchLat = userLocation?.lat || 25.0330;
+      let searchLng = userLocation?.lng || 121.5434;
+
       if (overrideLat !== null && overrideLng !== null) {
         searchLat = overrideLat; searchLng = overrideLng;
       } else if (searchType === 'mapCenter' && mapRef.current) {
         const center = mapRef.current.getCenter();
         searchLat = center.lat; searchLng = center.lng;
-      } else if (userLocation) {
-        searchLat = userLocation.lat; searchLng = userLocation.lng;
       }
 
-      const speciesPrefix = petProfile.type === 'dog' ? '狗狗' : '貓咪';
-      const queryKeyword = `${speciesPrefix} ${keyword}`;
-      const res = await fetch(`/api/places?keyword=${encodeURIComponent(queryKeyword)}&lat=${searchLat}&lng=${searchLng}&t=${new Date().getTime()}`);
+      const res = await fetch(`/api/places?keyword=${encodeURIComponent(keyword)}&lat=${searchLat}&lng=${searchLng}&t=${new Date().getTime()}`);
       if (!res.ok) throw new Error('API Error');
       
       const data = await res.json();
@@ -625,7 +605,7 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 🌟 1. 定位載入中 UI：連線外太空動畫 */}
+      {/* 定位載入中 UI */}
       {locationStatus === 'loading' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#FAF6F0]/80 backdrop-blur-sm">
           <div className="bg-white rounded-3xl p-6 shadow-xl flex flex-col items-center max-w-xs text-center border border-[#E8DFD8]">
@@ -640,7 +620,7 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 🌟 2. 定位被拒絕 UI：提示迷路 */}
+      {/* 定位被拒絕 UI */}
       {locationStatus === 'denied' && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in">
           <div className="bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center max-w-sm text-center border border-[#E8DFD8]">
