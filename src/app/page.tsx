@@ -100,6 +100,8 @@ const calculateAge = (birthday: string) => {
 export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(false);
+  
+  // 🌟 定位狀態 (載入中、成功、被拒絕)
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle');
 
   const [petProfile, setPetProfile] = useState<PetProfile>({
@@ -126,7 +128,7 @@ export default function FullMapAIPortal() {
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAiTyping, setIsAiTyping] = useState(false); 
-  const [isAnalyzingDetail, setIsAnalyzingDetail] = useState(false); // 🌟 AI 正在分析詳細評論
+  const [isAnalyzingDetail, setIsAnalyzingDetail] = useState(false);
 
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
@@ -177,6 +179,7 @@ export default function FullMapAIPortal() {
       
       map.on('dragend', () => setShowSearchHereBtn(true));
 
+      // 🌟 啟動定位並觸發「連線外太空」彈窗
       if ('geolocation' in navigator) {
         setLocationStatus('loading');
         navigator.geolocation.getCurrentPosition(
@@ -316,7 +319,7 @@ export default function FullMapAIPortal() {
             phone: place.phone || '未提供電話',
             openingHours: place.openingHours || '今日營業中',
             website: place.website,
-            realReviews: place.realReviews || [], // 🌟 包含真實評論內文
+            realReviews: place.realReviews || [],
             price: '需洽詢',
             photoUrl: place.photoUrl || defaultImg,
             distanceKm, distanceText,
@@ -404,7 +407,6 @@ export default function FullMapAIPortal() {
     }
   };
 
-  // 🌟 點擊開啟卡片時，呼叫 AI 真實分析 5 則顧客評論
   const openDetailModal = async (store: Store) => {
     setSelectedDetailStore(store);
     setIsSheetExpanded(false);
@@ -414,7 +416,6 @@ export default function FullMapAIPortal() {
       mapRef.current.flyTo([store.lat, store.lng], 15, { animate: true, duration: 1.0 });
     }
 
-    // 啟動 AI 真實評論分析 (若尚未分析過)
     if (!store.aiSummary || store.aiSummary.includes('點擊展開')) {
       setIsAnalyzingDetail(true);
       try {
@@ -431,7 +432,6 @@ export default function FullMapAIPortal() {
 
         const analysisData = await res.json();
         
-        // 更新該店家的分析結果
         setSelectedDetailStore(prev => prev ? {
           ...prev,
           aiSummary: analysisData.aiSummary || '根據真實評論：該店家整體服務獲得顧客良好評價。',
@@ -567,7 +567,7 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 🌟 店家詳情 Bottom Sheet（展示真實評論 AI 總結與引述原文） */}
+      {/* 店家詳情 Bottom Sheet */}
       {selectedDetailStore && (
         <div className="absolute z-[60] bg-white/95 backdrop-blur-3xl shadow-2xl top-0 bottom-0 left-0 w-full md:w-[440px] flex flex-col pointer-events-auto border-r border-[#E8DFD8]">
           <div className="relative h-56 w-full shrink-0">
@@ -582,7 +582,6 @@ export default function FullMapAIPortal() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-5 space-y-5 hide-scrollbar">
-            {/* 🌟 真實 AI 觀點總結 */}
             <div className="bg-[#FAF6F0] border border-[#E8DFD8] rounded-2xl p-4">
               <h3 className="text-sm font-black text-[#38312D] mb-2 flex items-center">
                 <Sparkles className="w-4 h-4 text-[#B88746] mr-1.5" />
@@ -600,7 +599,6 @@ export default function FullMapAIPortal() {
               )}
             </div>
 
-            {/* 🌟 帶有真實引述原文的需求佐證 */}
             <div>
               <h3 className="text-sm font-black text-[#38312D] mb-3">Google 真實顧客評論佐證</h3>
               <div className="space-y-3">
@@ -612,7 +610,6 @@ export default function FullMapAIPortal() {
                     </div>
                     <p className="text-xs text-[#6E5A4D] font-bold pl-2 border-l-2 border-[#B88746]">{faq.answer}</p>
                     
-                    {/* 🌟 真實引述句與評論者 */}
                     {faq.quoteText && (
                       <div className="bg-[#FBF6EE] rounded-xl p-2.5 text-[11px] text-[#8C7A6B] font-medium leading-relaxed">
                         <Quote className="w-3 h-3 text-[#B88746] inline mr-1 rotate-180" />
@@ -624,6 +621,43 @@ export default function FullMapAIPortal() {
                 ))}
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🌟 1. 定位載入中 UI：連線外太空動畫 */}
+      {locationStatus === 'loading' && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-[#FAF6F0]/80 backdrop-blur-sm">
+          <div className="bg-white rounded-3xl p-6 shadow-xl flex flex-col items-center max-w-xs text-center border border-[#E8DFD8]">
+            <div className="w-16 h-16 mb-4 animate-bounce">
+              <span className="text-5xl">🛰️</span>
+            </div>
+            <h3 className="text-[#38312D] font-black text-lg mb-2">正在與外太空連線...</h3>
+            <p className="text-[#6E5A4D] text-sm font-bold leading-relaxed">
+              正在為您定位中！請稍候，我們保證沒有被外星人綁架 👽
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* 🌟 2. 定位被拒絕 UI：提示迷路 */}
+      {locationStatus === 'denied' && (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/40 backdrop-blur-md animate-in fade-in">
+          <div className="bg-white rounded-3xl p-6 shadow-2xl flex flex-col items-center max-w-sm text-center border border-[#E8DFD8]">
+            <div className="w-16 h-16 mb-4 bg-rose-100 rounded-full flex items-center justify-center">
+              <span className="text-3xl">🐶</span>
+            </div>
+            <h3 className="text-[#38312D] font-black text-xl mb-2">我們迷路了！</h3>
+            <p className="text-[#6E5A4D] text-sm font-medium leading-relaxed mb-6">
+              沒有您的位置，系統會像迷路的小狗一樣不知所措。<br/><br/>
+              為了給您最精準的周邊推薦，強烈建議您至瀏覽器設定中<b>「允許存取位置」</b>，然後重新整理網頁喔！
+            </p>
+            <button 
+              onClick={() => setLocationStatus('error')}
+              className="w-full bg-[#B88746] hover:bg-[#A67C52] text-white font-black py-3 rounded-2xl transition-all active:scale-95"
+            >
+              好，我知道了
+            </button>
           </div>
         </div>
       )}
