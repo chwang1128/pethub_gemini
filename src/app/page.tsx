@@ -225,7 +225,7 @@ export default function FullMapAIPortal() {
   const [stores, setStores] = useState<Store[]>([]);
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [isAiTyping, setIsAiTyping] = useState(false); // 🌟 新增 AI 思考中狀態
+  const [isAiTyping, setIsAiTyping] = useState(false); 
   
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
@@ -434,7 +434,6 @@ export default function FullMapAIPortal() {
           const topStores = sortedForCards.slice(0, 3);
           setDisplayedStores(topStores);
 
-          // 注意：真實呼叫 API 時，這裡由 Gemini API 的回覆取代，這段可以保留當地圖篩選完畢的輔助提示。
         } else {
           setStores(allFetchedStores);
           setDisplayedStores([]); 
@@ -468,7 +467,9 @@ export default function FullMapAIPortal() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           prompt: text,
-          petProfile: petProfile
+          petProfile: petProfile,
+          // 🌟 關鍵修復：把畫面上的店家清單傳給後端
+          contextStores: displayedStores
         })
       });
 
@@ -909,13 +910,15 @@ export default function FullMapAIPortal() {
                       </div>
 
                       {/* 🌟 新增：引述原文字句與評論者資料 */}
-                      <div className="bg-[#FAF6F0] rounded-xl p-2.5 text-[11px] text-[#8C7A6B] font-medium leading-relaxed flex items-start space-x-1.5">
-                        <Quote className="w-3.5 h-3.5 text-[#B88746] shrink-0 mt-0.5 rotate-180" />
-                        <div className="flex-1">
-                          <span>{faq.quoteText}</span>
-                          <span className="block text-[10px] text-[#B88746] font-bold mt-1">— {faq.authorInfo}</span>
+                      {faq.quoteText && (
+                        <div className="bg-[#FAF6F0] rounded-xl p-2.5 text-[11px] text-[#8C7A6B] font-medium leading-relaxed flex items-start space-x-1.5">
+                          <Quote className="w-3.5 h-3.5 text-[#B88746] shrink-0 mt-0.5 rotate-180" />
+                          <div className="flex-1">
+                            <span>{faq.quoteText}</span>
+                            <span className="block text-[10px] text-[#B88746] font-bold mt-1">— {faq.authorInfo}</span>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   ))}
                 </div>
