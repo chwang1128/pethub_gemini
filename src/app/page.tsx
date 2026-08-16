@@ -342,19 +342,21 @@ export default function FullMapAIPortal() {
         iconAnchor: isSelected ? [23, 56] : [20, 48]
       });
 
-      const marker = L.marker([store.lat, store.lng], { icon: customIcon, zIndexOffset: isSelected ? 1000 : 0 }).addTo(mapRef.current);
-      marker.on('click', () => openDetailModal(store));
-      markersRef.current.push(marker);
+      // 只有 displayedStores 裡面有的卡片才在地圖上顯示標記
+      if (displayedStores.some(ds => ds.id === store.id)) {
+        const marker = L.marker([store.lat, store.lng], { icon: customIcon, zIndexOffset: isSelected ? 1000 : 0 }).addTo(mapRef.current);
+        marker.on('click', () => openDetailModal(store));
+        markersRef.current.push(marker);
+      }
     });
 
-    if (stores.length > 0 && !selectedDetailStore) {
-      const bounds = L.latLngBounds(stores.map(s => [s.lat, s.lng]));
+    if (displayedStores.length > 0 && !selectedDetailStore) {
+      const bounds = L.latLngBounds(displayedStores.map(s => [s.lat, s.lng]));
       if (userLocation && !showSearchHereBtn) bounds.extend([userLocation.lat, userLocation.lng]);
       mapRef.current.fitBounds(bounds, { paddingBottomRight: [10, 140], paddingTopLeft: [10, 160], maxZoom: 15 });
     }
-  }, [stores, selectedDetailStore]);
+  }, [stores, displayedStores, selectedDetailStore]);
 
-  // 🌟 關鍵修改 1：讓函式能夠回傳最新的店家陣列
   const searchGooglePlaces = async (keyword: string, searchType: 'gps' | 'mapCenter' = 'gps') => {
     setIsLoading(true);
     setShowSearchHereBtn(false);
@@ -434,28 +436,26 @@ export default function FullMapAIPortal() {
           setStores(allFetchedStores); 
           const topStores = sortedForCards.slice(0, 3);
           setDisplayedStores(topStores);
-          
-          return topStores; // 🌟 新增回傳
+          return topStores;
 
         } else {
           setStores(allFetchedStores);
           setDisplayedStores([]); 
-          return []; // 🌟 新增回傳
+          return [];
         }
 
       } else {
         setDisplayedStores([]);
-        return []; // 🌟 新增回傳
+        return [];
       }
     } catch (error) {
       console.error(error);
-      return []; // 🌟 新增回傳
+      return [];
     } finally {
       setIsLoading(false);
     }
   };
 
-  // 🌟 串接後端 Gemini API 的真正入口
   const handleSendMessage = async (textToSend?: string) => {
     const text = textToSend || inputQuery;
     if (!text.trim()) return;
@@ -463,10 +463,10 @@ export default function FullMapAIPortal() {
     setMessages(prev => [...prev, { sender: 'user', text }]);
     setInputQuery('');
     
-    // 啟動 Gemini API 打字狀態與等待地圖搜尋
+    // 啟動 Gemini API 打字狀態
     setIsAiTyping(true);
     
-    // 🌟 關鍵修改 2：加上 await 等待地圖搜尋完成，並把回傳的最新名單存起來
+    // 先抓取一次地圖（此時畫面上會先出現原本的 3 張卡片）
     const latestStores = await searchGooglePlaces(text, 'gps');
 
     try {
@@ -476,7 +476,6 @@ export default function FullMapAIPortal() {
         body: JSON.stringify({
           prompt: text,
           petProfile: petProfile,
-          // 🌟 關鍵修改 3：直接用剛剛出爐的 latestStores！
           contextStores: latestStores
         })
       });
@@ -484,6 +483,13 @@ export default function FullMapAIPortal() {
       const data = await res.json();
       if (data.text) {
         setMessages(prev => [...prev, { sender: 'ai', text: data.text }]);
+        
+        // 🌟 最關鍵的聯動：AI 發言完畢後，把沒被推薦的卡片直接過濾掉！
+        if (data.recommendedIds && Array.isArray(data.recommendedIds) && data.recommendedIds.length > 0) {
+          setDisplayedStores(prevStores => 
+            prevStores.filter(store => data.recommendedIds.includes(store.id))
+          );
+        }
       } else {
         setMessages(prev => [...prev, { sender: 'ai', text: '伺服器似乎發生錯誤，請確認 API Key 是否設定正確。' }]);
       }
@@ -687,7 +693,6 @@ export default function FullMapAIPortal() {
                   </div>
                 </div>
               ))}
-              {/* 🌟 加入明確的 Gemini 打字讀取狀態 */}
               {isAiTyping && (
                 <div className="flex justify-start">
                   <div className="p-4 rounded-[20px] max-w-[88%] bg-white ring-1 ring-[#E8DFD8] text-[#38312D] rounded-tl-sm flex items-center space-x-2">
@@ -887,7 +892,6 @@ export default function FullMapAIPortal() {
                 </div>
               </div>
 
-              {/* 🌟 直接在卡片上展開原文引用與評論者來源 */}
               <div className="px-5 pb-4">
                 <h3 className="text-xs md:text-sm font-black text-[#38312D] mb-3 flex items-center">
                   <span className="w-1.5 h-3.5 rounded-full bg-[#B88746] mr-2"></span>
@@ -901,7 +905,6 @@ export default function FullMapAIPortal() {
                           <span className="text-[#B88746] mr-1.5 font-black">Q</span>
                           {faq.question}
                         </div>
-                        {/* 🌟 跳至 Google Maps 開啟該店家的該關鍵字評論 */}
                         <a 
                           href={faq.sourceUrl}
                           target="_blank" 
@@ -917,7 +920,6 @@ export default function FullMapAIPortal() {
                         {faq.answer}
                       </div>
 
-                      {/* 🌟 新增：引述原文字句與評論者資料 */}
                       {faq.quoteText && (
                         <div className="bg-[#FAF6F0] rounded-xl p-2.5 text-[11px] text-[#8C7A6B] font-medium leading-relaxed flex items-start space-x-1.5">
                           <Quote className="w-3.5 h-3.5 text-[#B88746] shrink-0 mt-0.5 rotate-180" />
