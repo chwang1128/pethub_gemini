@@ -262,7 +262,6 @@ export default function FullMapAIPortal() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading, isAiTyping]);
 
-  // 🌟 正版 Google Maps API 載入與初始化
   useEffect(() => {
     const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
@@ -273,12 +272,17 @@ export default function FullMapAIPortal() {
       const map = new google.maps.Map(document.getElementById('full-map') as HTMLElement, {
         center: { lat: 25.0330, lng: 121.5434 },
         zoom: 15,
-        disableDefaultUI: true, // 保持介面潔淨
+        disableDefaultUI: true, 
         zoomControl: false,
         mapTypeControl: false,
         streetViewControl: false,
         fullscreenControl: false,
-        clickableIcons: false
+        clickableIcons: false,
+        // 🌟 關鍵魔法：強力隱藏所有與寵物無關的地圖預設干擾物 (POI)
+        styles: [
+          { featureType: "poi", stylers: [{ visibility: "off" }] },
+          { featureType: "transit", stylers: [{ visibility: "off" }] }
+        ]
       });
 
       mapRef.current = map;
@@ -295,7 +299,6 @@ export default function FullMapAIPortal() {
             const lng = position.coords.longitude;
             setUserLocation({ lat, lng });
 
-            // 畫出定位標記
             if (userMarkerRef.current) userMarkerRef.current.setMap(null);
             userMarkerRef.current = new google.maps.Marker({
               position: { lat, lng },
@@ -347,12 +350,10 @@ export default function FullMapAIPortal() {
     }
   }, [userLocation, hasAutoSearched]);
 
-  // 🌟 Google Maps 標記繪製邏輯
   useEffect(() => {
     const google = (window as any).google;
     if (!google || !google.maps || !mapRef.current) return;
 
-    // 清除舊標記
     markersRef.current.forEach(m => m.setMap(null));
     markersRef.current = [];
 
