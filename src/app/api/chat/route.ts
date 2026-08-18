@@ -21,7 +21,7 @@ export async function POST(req: Request) {
     let systemPrompt = '';
     
     if (!isEvaluationPhase) {
-      // 🌟 階段 1：需求釐清階段（這時還不搜尋地圖）
+      // 階段 1：需求釐清階段
       systemPrompt = `你現在是 PetHub 的「專業寵物照護助理」。
 服務毛孩：${petProfile?.name || '毛孩'} (${petProfile?.type === 'dog' ? '狗狗' : '貓咪'})
 品種：${petProfile?.breed || '未填寫'}
@@ -47,7 +47,7 @@ export async function POST(req: Request) {
 }`;
 
     } else {
-      // 🌟 階段 2：店家評估與推薦階段（地圖搜完後）
+      // 階段 2：店家評估與推薦階段
       const simplifiedStores = contextStores ? contextStores.map((s: any) => ({
         id: s.id, name: s.name, address: s.address, rating: s.rating, features: s.aiSummary
       })) : [];
