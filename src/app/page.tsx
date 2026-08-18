@@ -4,7 +4,7 @@ import {
   Quote, PawPrint, Sparkles, Send, MapPin, 
   X, Coins, Star, RefreshCcw, Search, ChevronRight,
   Clock, Phone, Navigation, Map, MessageCircle, Globe, ChevronUp, ChevronDown,
-  Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText
+  Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText, Loader2
 } from 'lucide-react';
 
 interface PetProfile {
@@ -31,6 +31,8 @@ interface FaqHighlight {
   answer: string;
   sourceType: 'Google 顧客評論' | '商家官方簡介';
   sourceUrl: string;
+  quoteText?: string;
+  authorInfo?: string;
 }
 
 interface Store {
@@ -50,6 +52,7 @@ interface Store {
   phone?: string;
   openingHours?: string;
   website?: string;
+  realReviews?: Array<{ author: string; text: string; rating: number; relativeTime: string }>;
   requirementsStatus: RequirementTag[];
   allEssentialMet: boolean; 
   aiDetails: {
@@ -163,9 +166,12 @@ const generateDynamicAiAnalysis = (
   if (lowerName.includes('住宿') || lowerName.includes('旅館') || lowerName.includes('寄宿')) {
     serviceProvided = '提供獨立寵物住宿套房、日間安親照護與專人陪伴服務';
     specialty = '設有全區不關籠大坪數放風區，每日定時回傳照護影片';
-  } else if (lowerName.includes('春室') || lowerName.includes('咖啡') || lowerName.includes('café') || lowerName.includes('brunch') || lowerName.includes('料理') || lowerName.includes('吃') || lowerName.includes('老炭')) {
-    serviceProvided = '提供特色手作餐點、精品特調飲品與寵物同行用餐環境';
-    specialty = '室內通風良好無異味，桌距寬敞，歡迎毛孩落地同桌陪伴用餐';
+  } else if (lowerName.includes('醫院') || lowerName.includes('診所')) {
+    serviceProvided = '提供專業寵物醫療與健康諮詢服務';
+    specialty = '醫師問診詳細且具備耐心，設備齊全';
+  } else if (lowerName.includes('咖啡') || lowerName.includes('餐廳') || lowerName.includes('吃')) {
+    serviceProvided = '提供特色餐點飲品與寵物同行用餐環境';
+    specialty = '室內通風無異味，桌距寬敞，歡迎毛孩落地同桌陪伴用餐';
   }
 
   const generalSummary = `【提供產品與服務】${serviceProvided}。\n` +
@@ -180,16 +186,11 @@ const generateDynamicAiAnalysis = (
 
     if (req.includes('住宿')) {
       question = '是否具備合格寵物住宿服務？';
-      answer = '依據商家官方簡介：提供通過特寵法規認證之獨立住宿空間與 24H 專人看護。';
+      answer = '依據商家官方簡介：提供獨立住宿空間與專人看護。';
       sourceType = '商家官方簡介';
     } else if (req.includes('不關籠')) {
       question = '住宿是否提供「不關籠」照護？';
-      answer = '依據顧客評論紀錄：館內日間完全不關籠，設有大坪數遊戲大廳專人陪伴。';
-      sourceType = 'Google 顧客評論';
-    } else if (req.includes('鮮食')) {
-      question = '是否提供「鮮食」或協助代餵加熱？';
-      answer = '依據商家官方介紹：備有獨立專用冷凍冰箱與加熱設備，可免費協助家長代餵自備鮮食。';
-      sourceType = '商家官方簡介';
+      answer = '依據顧客評論紀錄：館內日間設有遊戲大廳專人陪伴。';
     }
 
     return { question, answer, sourceType, sourceUrl };
@@ -227,19 +228,27 @@ export default function FullMapAIPortal() {
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAiTyping, setIsAiTyping] = useState(false); 
-  
+  const [isAnalyzingDetail, setIsAnalyzingDetail] = useState(false);
+
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
 
   const [lastKeyword, setLastKeyword] = useState('寵物服務');
   const [showSearchHereBtn, setShowSearchHereBtn] = useState(false);
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>({ lat: 25.0330, lng: 121.5434 });
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>({ lat: 24.8013, lng: 120.9715 });
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
   
   const mapRef = useRef<any>(null);
   const markersRef = useRef<any[]>([]);
   const userMarkerRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // 🌟 手機版體驗優化：進入畫面時，若為手機螢幕則自動縮小 AI 對話框
+  useEffect(() => {
+    if (window.innerWidth < 768) {
+      setIsAiBoxMinimized(true);
+    }
+  }, []);
 
   useEffect(() => {
     let meta = document.querySelector('meta[name="viewport"]');
@@ -271,7 +280,7 @@ export default function FullMapAIPortal() {
       const L = (window as any).L;
       if (!L || mapRef.current) return;
 
-      const map = L.map('full-map', { zoomControl: false, attributionControl: false }).setView([25.0330, 121.5434], 14);
+      const map = L.map('full-map', { zoomControl: false, attributionControl: false }).setView([24.8013, 120.9715], 14);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
       mapRef.current = map;
       
@@ -305,13 +314,13 @@ export default function FullMapAIPortal() {
             } else {
               setLocationStatus('error');
             }
-            searchGooglePlaces('寵物友善', 'gps', 25.0330, 121.5434);
+            searchGooglePlaces('寵物友善', 'gps', 24.8013, 120.9715);
           },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
         );
       } else {
         setLocationStatus('error');
-        searchGooglePlaces('寵物友善', 'gps', 25.0330, 121.5434);
+        searchGooglePlaces('寵物友善', 'gps', 24.8013, 120.9715);
       }
     };
     document.body.appendChild(script);
@@ -366,7 +375,6 @@ export default function FullMapAIPortal() {
     }
   }, [stores, displayedStores, selectedDetailStore]);
 
-  // 🌟 支援 AI 跨區座標導航 (overrideLat / overrideLng)
   const searchGooglePlaces = async (
     keyword: string, 
     searchType: 'gps' | 'mapCenter' = 'gps',
@@ -377,6 +385,7 @@ export default function FullMapAIPortal() {
     setShowSearchHereBtn(false);
     setLastKeyword(keyword);
     setSelectedDetailStore(null); 
+    if (window.innerWidth < 768) setIsAiBoxMinimized(true); // 手機版搜尋後自動收起 AI 框以展示結果
 
     try {
       let searchLat = userLocation?.lat || 25.0330;
@@ -390,7 +399,6 @@ export default function FullMapAIPortal() {
         searchLat = center.lat; searchLng = center.lng;
       }
 
-      // 🌟 剔除「狗狗」、「貓咪」這類前端硬加上去的詞彙，直接送乾淨的 keyword
       const res = await fetch(`/api/places?keyword=${encodeURIComponent(keyword)}&lat=${searchLat}&lng=${searchLng}&t=${new Date().getTime()}`);
       if (!res.ok) throw new Error('API Error');
       
@@ -424,7 +432,7 @@ export default function FullMapAIPortal() {
             openingHours: '營業時間請洽官方',
             website: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
             price: '需洽詢',
-            photoUrl: place.photoUrl || defaultImg, // 使用 API 傳來的真實照片
+            photoUrl: place.photoUrl || defaultImg,
             distanceKm, distanceText,
             requirementsStatus: tags,
             allEssentialMet,
@@ -550,6 +558,7 @@ export default function FullMapAIPortal() {
   const openDetailModal = (store: Store) => {
     setSelectedDetailStore(store);
     setIsSheetExpanded(false);
+    if (window.innerWidth < 768) setIsAiBoxMinimized(true); // 🌟 點開店家詳情時自動收起 AI 框
     
     if (mapRef.current) {
       const L = (window as any).L;
@@ -706,11 +715,17 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 💻 電腦版專屬對話視窗 */}
+      {/* 💻 電腦與手機共用對話視窗 (拔除 hidden md:flex) */}
       {!isAiBoxMinimized && (
-        <div className="hidden md:flex absolute bottom-6 right-6 w-[400px] z-30 flex-col pointer-events-none">
-          <div className="bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-[32px] shadow-[0_24px_48px_rgba(56,49,45,0.12)] p-6 flex flex-col h-[560px] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden">
+        <div className="flex absolute bottom-0 md:bottom-6 md:right-6 w-full md:w-[400px] z-[70] flex-col pointer-events-none animate-in slide-in-from-bottom-10">
+          <div className="bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[32px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 md:p-6 flex flex-col h-[55vh] md:h-[560px] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-[#B88746]/10 to-transparent pointer-events-none"></div>
+            
+            {/* 手機版下拉收合提示條 */}
+            <div className="w-full flex justify-center pb-3 md:hidden" onClick={() => setIsAiBoxMinimized(true)}>
+               <div className="w-12 h-1.5 bg-[#D8C9BC] rounded-full cursor-pointer"></div>
+            </div>
+
             <button 
               onClick={(e) => { e.stopPropagation(); setIsAiBoxMinimized(true); }} 
               className="absolute top-5 right-5 text-[#A67C52] hover:text-[#38312D] bg-white/60 hover:bg-white shadow-sm p-2 rounded-full z-[100] transition-all cursor-pointer ring-1 ring-black/5"
