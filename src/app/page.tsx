@@ -349,6 +349,7 @@ export default function FullMapAIPortal() {
     }
   }, [userLocation, hasAutoSearched]);
 
+  // 🌟 Google Maps 自訂狗掌/星星標記邏輯
   useEffect(() => {
     const google = (window as any).google;
     if (!google || !google.maps || !mapRef.current) return;
@@ -360,28 +361,42 @@ export default function FullMapAIPortal() {
       const isSelected = selectedDetailStore?.id === store.id || displayedStores.some(ds => ds.id === store.id);
       
       const pinColor = isSelected ? '#E07A5F' : '#B88746';
-      
-      const markerSvg = {
-        path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
-        fillColor: pinColor,
-        fillOpacity: 1,
-        strokeColor: '#FFFFFF',
-        strokeWeight: 2,
-        scale: isSelected ? 1.8 : 1.4,
-        anchor: new google.maps.Point(12, 22),
+      const scale = isSelected ? 1.2 : 1.0;
+      const width = 36 * scale;
+      const height = 44 * scale;
+
+      // 未選中：狗掌圖案 / 已選中：星星圖案
+      const innerContent = isSelected 
+        ? `<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`
+        : `<path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM19 8a2 2 0 0 0-2 2v1a2 2 0 0 0 4 0v-1a2 2 0 0 0-2-2ZM5 8a2 2 0 0 0-2 2v1a2 2 0 0 0 4 0v-1a2 2 0 0 0-2-2ZM12 10a6 6 0 0 0-6 6v3a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-3a6 6 0 0 0-6-6Z" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+      // 將背景圖釘與內部圖示結合成完整的 SVG
+      const fullSvg = `
+        <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 36 44">
+          <path d="M18 42 L 11 30 A 14 14 0 1 1 25 30 Z" fill="${pinColor}" stroke="#FFFFFF" stroke-width="2.5"/>
+          <g transform="translate(6, 4)">
+            ${innerContent}
+          </g>
+        </svg>
+      `;
+
+      // 轉換成 Google Maps 支援的 Data URL 格式
+      const markerIcon = {
+        url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(fullSvg.trim())}`,
+        scaledSize: new google.maps.Size(width, height),
+        anchor: new google.maps.Point(width / 2, height)
       };
 
       const marker = new google.maps.Marker({
         position: { lat: store.lat, lng: store.lng },
         map: mapRef.current,
-        icon: markerSvg,
+        icon: markerIcon,
         title: store.name,
         zIndex: isSelected ? 1000 : 1
       });
 
       marker.addListener('click', () => {
         setDisplayedStores([store]); 
-        // 🌟 修正1：只做平移(panTo)，不做縮放設定，也不會觸發自動拉遠
         mapRef.current.panTo({ lat: store.lat, lng: store.lng });
       });
 
@@ -389,7 +404,6 @@ export default function FullMapAIPortal() {
     });
 
     if (displayedStores.length > 0 && !selectedDetailStore && lastSearchMode !== 'mapCenter') {
-      // 🌟 修正2：只有當「大於 1 家店」時，才進行地圖範圍縮放，單點只做移動
       if (displayedStores.length === 1) {
         mapRef.current.panTo({ lat: displayedStores[0].lat, lng: displayedStores[0].lng });
       } else {
@@ -596,7 +610,6 @@ export default function FullMapAIPortal() {
     if (window.innerWidth < 768) setIsAiBoxMinimized(true); 
     
     if (mapRef.current) {
-      // 🌟 修正3：點開卡片詳細資訊時，也只做平滑移動，不強制拉近拉遠
       mapRef.current.panTo({ lat: store.lat, lng: store.lng });
     }
   };
@@ -633,7 +646,6 @@ export default function FullMapAIPortal() {
     }
   };
 
-  // 🌟 新增：回到我的位置函數
   const handleReturnToLocation = () => {
     const lat = userLocation?.lat || 25.0330;
     const lng = userLocation?.lng || 121.5434;
@@ -668,7 +680,7 @@ export default function FullMapAIPortal() {
     <div className="relative w-screen h-[100dvh] overflow-hidden font-sans bg-[#FAF6F0] text-[#3D2E24]">
       <style>{hideScrollbarStyle}</style>
       
-      {/* 1. 全局地圖 */}
+      {/* 1. 全局地圖 (正版 Google Maps) */}
       <div id="full-map" className="absolute inset-0 z-0 h-full w-full"></div>
 
       {/* 2. 頂部 Header */}
