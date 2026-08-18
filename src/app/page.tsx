@@ -4,7 +4,7 @@ import {
   Quote, PawPrint, Sparkles, Send, MapPin, 
   X, Coins, Star, RefreshCcw, Search, ChevronRight,
   Clock, Phone, Navigation, Map, MessageCircle, Globe, ChevronUp, ChevronDown,
-  Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText, LocateFixed
+  Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText, LocateFixed, Mic
 } from 'lucide-react';
 
 interface PetProfile {
@@ -202,6 +202,9 @@ export default function FullMapAIPortal() {
   const [hasOpenedAi, setHasOpenedAi] = useState(false);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle');
 
+  // 🌟 語音辨識狀態
+  const [isListening, setIsListening] = useState(false);
+
   const [petProfile, setPetProfile] = useState<PetProfile>({
     name: '來福',
     type: 'dog',
@@ -299,22 +302,52 @@ export default function FullMapAIPortal() {
             setUserLocation({ lat, lng });
 
             if (userMarkerRef.current) userMarkerRef.current.setMap(null);
-            userMarkerRef.current = new google.maps.Marker({
-              position: { lat, lng },
-              map,
-              title: "您的目前位置",
-              icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                fillColor: '#B88746',
-                fillOpacity: 1,
-                strokeColor: '#FFFFFF',
-                strokeWeight: 3,
-                scale: 9
-              }
-            });
+            
+            class UserLocationOverlay extends google.maps.OverlayView {
+              private position: any;
+              private div: HTMLElement | null;
 
-            map.panTo({ lat, lng });
-            map.setZoom(15);
+              constructor(pos: any, m: any) {
+                super();
+                this.position = pos;
+                this.div = null;
+                this.setMap(m);
+              }
+
+              onAdd() {
+                this.div = document.createElement('div');
+                this.div.style.position = 'absolute';
+                this.div.style.transform = 'translate(-50%, -50%)'; 
+                this.div.innerHTML = `
+                  <div class="relative flex items-center justify-center w-8 h-8 cursor-pointer">
+                    <span class="absolute inline-flex w-full h-full rounded-full opacity-60 animate-ping bg-amber-500"></span>
+                    <span class="relative inline-flex w-4 h-4 text-white rounded-full bg-[#B88746] border-[2.5px] border-white shadow-[0_0_12px_rgba(184,135,70,0.5)]"></span>
+                  </div>
+                `;
+                const panes = this.getPanes();
+                panes.overlayImage.appendChild(this.div);
+              }
+
+              draw() {
+                const overlayProjection = this.getProjection();
+                const pos = overlayProjection.fromLatLngToDivPixel(this.position);
+                if (this.div) {
+                  this.div.style.left = pos.x + 'px';
+                  this.div.style.top = pos.y + 'px';
+                }
+              }
+
+              onRemove() {
+                if (this.div && this.div.parentNode) {
+                  this.div.parentNode.removeChild(this.div);
+                  this.div = null;
+                }
+              }
+            }
+
+            userMarkerRef.current = new UserLocationOverlay(new google.maps.LatLng(lat, lng), map);
+            
+            map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
 
             searchGooglePlaces('寵物', 'gps', lat, lng, false);
           },
@@ -349,7 +382,6 @@ export default function FullMapAIPortal() {
     }
   }, [userLocation, hasAutoSearched]);
 
-  // 🌟 Google Maps 自訂狗掌/星星標記邏輯
   useEffect(() => {
     const google = (window as any).google;
     if (!google || !google.maps || !mapRef.current) return;
@@ -365,12 +397,10 @@ export default function FullMapAIPortal() {
       const width = 36 * scale;
       const height = 44 * scale;
 
-      // 未選中：狗掌圖案 / 已選中：星星圖案
       const innerContent = isSelected 
         ? `<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" fill="#FFFFFF" stroke="#FFFFFF" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>`
         : `<path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3ZM19 8a2 2 0 0 0-2 2v1a2 2 0 0 0 4 0v-1a2 2 0 0 0-2-2ZM5 8a2 2 0 0 0-2 2v1a2 2 0 0 0 4 0v-1a2 2 0 0 0-2-2ZM12 10a6 6 0 0 0-6 6v3a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-3a6 6 0 0 0-6-6Z" fill="none" stroke="#FFFFFF" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>`;
 
-      // 將背景圖釘與內部圖示結合成完整的 SVG
       const fullSvg = `
         <svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 36 44">
           <path d="M18 42 L 11 30 A 14 14 0 1 1 25 30 Z" fill="${pinColor}" stroke="#FFFFFF" stroke-width="2.5"/>
@@ -380,7 +410,6 @@ export default function FullMapAIPortal() {
         </svg>
       `;
 
-      // 轉換成 Google Maps 支援的 Data URL 格式
       const markerIcon = {
         url: `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(fullSvg.trim())}`,
         scaledSize: new google.maps.Size(width, height),
@@ -413,6 +442,59 @@ export default function FullMapAIPortal() {
       }
     }
   }, [stores, displayedStores, selectedDetailStore, lastSearchMode]);
+
+  // 🌟 AI 語音朗讀功能 (Text-to-Speech)
+  const speakText = (text: string) => {
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel(); // 停止上一句正在講的話
+      // 稍微過濾掉標點符號，讓語音引擎唸起來更順暢
+      const cleanText = text.replace(/[*#]/g, '');
+      const utterance = new SpeechSynthesisUtterance(cleanText);
+      utterance.lang = 'zh-TW';
+      utterance.rate = 1.05; // 語速稍微加快一點比較自然
+      window.speechSynthesis.speak(utterance);
+    }
+  };
+
+  // 🌟 AI 語音輸入功能 (Speech-to-Text)
+  const toggleListening = () => {
+    if (isListening) return; // 已經在聽了就忽略
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert('抱歉，您的瀏覽器不支援語音辨識功能。建議使用 Chrome 瀏覽器。');
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = 'zh-TW';
+    recognition.interimResults = false;
+    recognition.maxAlternatives = 1;
+
+    recognition.onstart = () => {
+      setIsListening(true);
+      // 中斷 AI 講話，讓使用者說話
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel(); 
+    };
+
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0][0].transcript;
+      setInputQuery(transcript);
+      // 🌟 使用者講完話，自動送出！
+      handleSendMessage(transcript);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error('語音辨識錯誤', event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+    };
+
+    recognition.start();
+  };
 
   const searchGooglePlaces = async (
     keyword: string, 
@@ -553,8 +635,10 @@ export default function FullMapAIPortal() {
 
       if (chatData.action === 'chat') {
         setMessages(prev => [...prev, { sender: 'ai', text: chatData.reply }]);
+        speakText(chatData.reply); // 🌟 念出 AI 釐清問題的回覆
       } else if (chatData.action === 'search') {
         setMessages(prev => [...prev, { sender: 'ai', text: chatData.reply }]);
+        speakText(chatData.reply); // 🌟 念出 AI 準備搜尋的提示
         
         const finalKeyword = chatData.keyword || text;
         const targetLat = chatData.targetLocation?.lat || null;
@@ -563,7 +647,9 @@ export default function FullMapAIPortal() {
         const latestStores = await searchGooglePlaces(finalKeyword, 'gps', targetLat, targetLng, true);
 
         if (latestStores.length === 0) {
-           setMessages(prev => [...prev, { sender: 'ai', text: '抱歉，系統在該地區附近暫時找不到符合條件的店家。' }]);
+           const noResultMsg = '抱歉，系統在該地區附近暫時找不到符合條件的店家。';
+           setMessages(prev => [...prev, { sender: 'ai', text: noResultMsg }]);
+           speakText(noResultMsg); // 🌟 念出無結果提示
            setIsAiTyping(false);
            return;
         }
@@ -587,6 +673,7 @@ export default function FullMapAIPortal() {
         
         if (evalData.reply) {
           setMessages(prev => [...prev, { sender: 'ai', text: evalData.reply }]);
+          speakText(evalData.reply); // 🌟 念出最終店家推薦回覆
           
           if (evalData.recommendedIds && Array.isArray(evalData.recommendedIds)) {
             if (evalData.recommendedIds.length > 0) {
@@ -598,7 +685,9 @@ export default function FullMapAIPortal() {
         }
       }
     } catch (err) {
-      setMessages(prev => [...prev, { sender: 'ai', text: '請求發生錯誤，後端可能尚未準備好。' }]);
+      const errorMsg = '請求發生錯誤，後端可能尚未準備好。';
+      setMessages(prev => [...prev, { sender: 'ai', text: errorMsg }]);
+      speakText(errorMsg);
     } finally {
       setIsAiTyping(false);
     }
@@ -638,6 +727,8 @@ export default function FullMapAIPortal() {
                          `💉 核心疫苗排程：\n「${tempProfile.vaccineName}」需每年補打，預計下次補打日為【${nextVacStr}】。`;
 
     setMessages(prev => [...prev, { sender: 'ai', text: healthReport }]);
+    // 🌟 念出生命檔案更新完成的提示
+    speakText(`生命檔案已更新！我已經為${tempProfile.name}安排好接下來的健康預防排程囉！`);
     searchGooglePlaces(lastKeyword, 'gps', null, null, false);
     
     if (isAiBoxMinimized) {
@@ -680,7 +771,7 @@ export default function FullMapAIPortal() {
     <div className="relative w-screen h-[100dvh] overflow-hidden font-sans bg-[#FAF6F0] text-[#3D2E24]">
       <style>{hideScrollbarStyle}</style>
       
-      {/* 1. 全局地圖 (正版 Google Maps) */}
+      {/* 1. 全局地圖 */}
       <div id="full-map" className="absolute inset-0 z-0 h-full w-full"></div>
 
       {/* 2. 頂部 Header */}
@@ -819,19 +910,30 @@ export default function FullMapAIPortal() {
             
             <div className="relative z-10 mt-5 pt-2 border-t border-[#E8DFD8]">
               <div className="flex items-center bg-white ring-1 ring-[#E8DFD8] rounded-[24px] p-1.5 focus-within:ring-2 focus-within:ring-[#B88746]/30 transition-all shadow-sm">
+                
+                {/* 🌟 語音辨識麥克風按鈕 */}
+                <button
+                  onClick={toggleListening}
+                  className={`p-2.5 rounded-full transition-all flex-shrink-0 ${isListening ? 'bg-rose-100 text-rose-500 animate-pulse' : 'text-[#A67C52] hover:bg-[#F7F2EA]'}`}
+                  title="語音輸入"
+                >
+                  <Mic className="w-5 h-5" />
+                </button>
+
                 <input 
                   type="text"
                   value={inputQuery}
                   onChange={(e) => setInputQuery(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                  placeholder={`請輸入想為 ${petProfile.name} 找的服務...`} 
-                  className="flex-1 bg-transparent text-sm px-4 py-3 outline-none text-[#38312D] placeholder:text-[#A67C52]/60"
-                  disabled={isAiTyping}
+                  placeholder={isListening ? "請說話..." : `請輸入想為 ${petProfile.name} 找的服務...`} 
+                  className="flex-1 bg-transparent text-sm px-2 py-3 outline-none text-[#38312D] placeholder:text-[#A67C52]/60"
+                  disabled={isAiTyping || isListening}
                 />
+                
                 <button 
                   onClick={() => handleSendMessage()} 
-                  disabled={isAiTyping}
-                  className={`p-3.5 rounded-[20px] shadow-md transition-all ${isAiTyping ? 'bg-[#D8C9BC] cursor-not-allowed' : 'bg-[#B88746] hover:bg-[#A67C52] text-white active:scale-95'}`}
+                  disabled={isAiTyping || isListening}
+                  className={`p-3.5 rounded-[20px] shadow-md transition-all ${(isAiTyping || isListening) ? 'bg-[#D8C9BC] cursor-not-allowed' : 'bg-[#B88746] hover:bg-[#A67C52] text-white active:scale-95'}`}
                 >
                   <Send className="w-4 h-4 ml-0.5" />
                 </button>
