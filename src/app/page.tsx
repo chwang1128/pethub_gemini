@@ -276,7 +276,7 @@ export default function FullMapAIPortal() {
       const L = (window as any).L;
       if (!L || mapRef.current) return;
 
-      const map = L.map('full-map', { zoomControl: false, attributionControl: false }).setView([25.0330, 121.5434], 14);
+      const map = L.map('full-map', { zoomControl: false, attributionControl: false }).setView([25.0330, 121.5434], 15);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
       mapRef.current = map;
       
@@ -303,8 +303,8 @@ export default function FullMapAIPortal() {
 
             userMarkerRef.current = L.marker([lat, lng], { icon: userIcon }).addTo(map).bindPopup("您的目前位置");
             
-            // 🌟 將初始定位的縮放層級從 15 提高到 16 (街道級)
-            map.flyTo([lat, lng], 16, { animate: true, duration: 1.5 });
+            // 🌟 首次定位成功後，強迫放大到層級 15（不論周邊店家多遠）
+            map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
 
             searchGooglePlaces('寵物', 'gps', lat, lng, false);
           },
@@ -366,19 +366,21 @@ export default function FullMapAIPortal() {
       
       marker.on('click', () => {
         setDisplayedStores([store]); 
+        // 點擊卡片時，維持高放大倍率
         mapRef.current.flyTo([store.lat, store.lng], 16, { animate: true, duration: 0.5 });
       });
       
       markersRef.current.push(marker);
     });
 
-    // 🌟 修正縮放邏輯：將使用者定位也納入計算，並將極限設為街道層次 (maxZoom: 16)
-    if (stores.length > 0 && !selectedDetailStore) {
-      const bounds = L.latLngBounds(stores.map(s => [s.lat, s.lng]));
+    // 🌟 核心修正：移除原本地圖「為了塞進所有地標而被迫縮小」的邏輯！
+    // 只有在底部有「特定的精選卡片」顯示時，才去微調邊界，且限制縮放層級不能小於 14
+    if (displayedStores.length > 0 && !selectedDetailStore) {
+      const bounds = L.latLngBounds(displayedStores.map(s => [s.lat, s.lng]));
       if (userLocation) {
         bounds.extend([userLocation.lat, userLocation.lng]);
       }
-      mapRef.current.fitBounds(bounds, { paddingBottomRight: [10, 140], paddingTopLeft: [10, 160], maxZoom: 16 });
+      mapRef.current.fitBounds(bounds, { paddingBottomRight: [10, 140], paddingTopLeft: [10, 160], maxZoom: 15 });
     }
   }, [stores, displayedStores, selectedDetailStore]);
 
@@ -405,6 +407,11 @@ export default function FullMapAIPortal() {
       } else if (searchType === 'mapCenter' && mapRef.current) {
         const center = mapRef.current.getCenter();
         searchLat = center.lat; searchLng = center.lng;
+      }
+
+      // 🌟 發動搜尋時，強制將視角鎖定在搜尋中心，維持高倍率 (層級 15)！
+      if (mapRef.current) {
+        mapRef.current.flyTo([searchLat, searchLng], 15, { animate: true, duration: 1.0 });
       }
 
       const res = await fetch(`/api/places?keyword=${encodeURIComponent(keyword)}&lat=${searchLat}&lng=${searchLng}&t=${new Date().getTime()}`);
