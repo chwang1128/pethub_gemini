@@ -199,13 +199,9 @@ const generateDynamicAiAnalysis = (
 export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(false);
-  
-  // 🌟 紀錄使用者是否已經知道怎麼打開 AI 視窗了
   const [hasOpenedAi, setHasOpenedAi] = useState(false);
-  
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle');
 
-  // 🌟 將預設名字從「波波」改為「來福」
   const [petProfile, setPetProfile] = useState<PetProfile>({
     name: '來福',
     type: 'dog',
@@ -266,28 +262,29 @@ export default function FullMapAIPortal() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isLoading, isAiTyping]);
 
+  // 🌟 正版 Google Maps API 載入與初始化
   useEffect(() => {
-    if (!document.getElementById('leaflet-css')) {
-      const link = document.createElement('link');
-      link.id = 'leaflet-css';
-      link.rel = 'stylesheet';
-      link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-      document.head.appendChild(link);
-    }
+    const apiKey = process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    script.async = true;
-    script.onload = () => {
-      const L = (window as any).L;
-      if (!L || mapRef.current) return;
+    const initGoogleMap = () => {
+      const google = (window as any).google;
+      if (!google || !google.maps || mapRef.current) return;
 
-      const map = L.map('full-map', { zoomControl: false, attributionControl: false }).setView([25.0330, 121.5434], 15);
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
+      const map = new google.maps.Map(document.getElementById('full-map') as HTMLElement, {
+        center: { lat: 25.0330, lng: 121.5434 },
+        zoom: 15,
+        disableDefaultUI: true, // 保持介面潔淨
+        zoomControl: false,
+        mapTypeControl: false,
+        streetViewControl: false,
+        fullscreenControl: false,
+        clickableIcons: false
+      });
+
       mapRef.current = map;
-      
-      map.on('dragend', () => setShowSearchHereBtn(true));
-      map.on('zoomend', () => setShowSearchHereBtn(true));
+
+      map.addListener('dragend', () => setShowSearchHereBtn(true));
+      map.addListener('zoom_changed', () => setShowSearchHereBtn(true));
 
       if ('geolocation' in navigator) {
         setLocationStatus('loading');
@@ -297,29 +294,30 @@ export default function FullMapAIPortal() {
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
             setUserLocation({ lat, lng });
-            
-            const userIcon = L.divIcon({
-              className: 'custom-user-pin',
-              html: `<div class="relative flex items-center justify-center w-7 h-7">
-                      <span class="absolute inline-flex w-full h-full rounded-full opacity-60 animate-ping bg-amber-500"></span>
-                      <span class="relative inline-flex w-4 h-4 text-white rounded-full bg-[#B88746] border-[2.5px] border-white shadow-[0_0_12px_rgba(184,135,70,0.5)]"></span>
-                    </div>`,
-              iconSize: [28, 28],
-              iconAnchor: [14, 14]
+
+            // 畫出定位標記
+            if (userMarkerRef.current) userMarkerRef.current.setMap(null);
+            userMarkerRef.current = new google.maps.Marker({
+              position: { lat, lng },
+              map,
+              title: "您的目前位置",
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                fillColor: '#B88746',
+                fillOpacity: 1,
+                strokeColor: '#FFFFFF',
+                strokeWeight: 3,
+                scale: 9
+              }
             });
 
-            userMarkerRef.current = L.marker([lat, lng], { icon: userIcon }).addTo(map).bindPopup("您的目前位置");
-            
-            map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
+            map.panTo({ lat, lng });
+            map.setZoom(15);
 
             searchGooglePlaces('寵物', 'gps', lat, lng, false);
           },
           (error) => {
-            if (error.code === error.PERMISSION_DENIED) {
-              setLocationStatus('denied');
-            } else {
-              setLocationStatus('error');
-            }
+            setLocationStatus(error.code === error.PERMISSION_DENIED ? 'denied' : 'error');
             searchGooglePlaces('寵物', 'gps', 25.0330, 121.5434, false);
           },
           { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
@@ -329,7 +327,17 @@ export default function FullMapAIPortal() {
         searchGooglePlaces('寵物', 'gps', 25.0330, 121.5434, false);
       }
     };
-    document.body.appendChild(script);
+
+    if ((window as any).google && (window as any).google.maps) {
+      initGoogleMap();
+    } else {
+      const script = document.createElement('script');
+      script.id = 'google-maps-js';
+      script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=geometry`;
+      script.async = true;
+      script.onload = () => initGoogleMap();
+      document.body.appendChild(script);
+    }
   }, []);
 
   useEffect(() => {
@@ -339,49 +347,50 @@ export default function FullMapAIPortal() {
     }
   }, [userLocation, hasAutoSearched]);
 
+  // 🌟 Google Maps 標記繪製邏輯
   useEffect(() => {
-    const L = (window as any).L;
-    if (!L || !mapRef.current) return;
+    const google = (window as any).google;
+    if (!google || !google.maps || !mapRef.current) return;
 
-    markersRef.current.forEach(m => mapRef.current.removeLayer(m));
+    // 清除舊標記
+    markersRef.current.forEach(m => m.setMap(null));
     markersRef.current = [];
 
     stores.forEach(store => {
       const isSelected = selectedDetailStore?.id === store.id || displayedStores.some(ds => ds.id === store.id);
       
-      const pinBg = isSelected ? 'bg-[#E07A5F]' : 'bg-[#B88746]';
-      const pinShadow = isSelected ? 'shadow-[0_8px_24px_rgba(224,122,95,0.6)]' : 'shadow-[0_6px_16px_rgba(184,135,70,0.35)]';
-      const scaleClass = isSelected ? 'scale-125 z-[1000]' : 'hover:scale-110 hover:-translate-y-1.5';
+      const pinColor = isSelected ? '#E07A5F' : '#B88746';
       
-      const customIcon = L.divIcon({
-        className: 'custom-store-pin',
-        html: `<div class="group relative flex items-center justify-center w-10 h-10 transition-all duration-500 ${scaleClass} cursor-pointer">
-                 <div class="absolute inset-0 ${pinBg} rounded-full ${pinShadow} border-[3px] border-white flex items-center justify-center text-white backdrop-blur-sm">
-                   ${isSelected 
-                     ? `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>`
-                     : `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v1a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 8a2 2 0 0 0-2 2v1a2 2 0 0 0 4 0v-1a2 2 0 0 0-2-2Z"/><path d="M5 8a2 2 0 0 0-2 2v1a2 2 0 0 0 4 0v-1a2 2 0 0 0-2-2Z"/><path d="M12 10a6 6 0 0 0-6 6v3a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-3a6 6 0 0 0-6-6Z"/></svg>`
-                   }
-                 </div>
-                 <div class="absolute -bottom-1 w-2.5 h-2.5 ${pinBg} rotate-45 transform origin-center border-r-[3px] border-b-[3px] border-white"></div>
-               </div>`,
-        iconSize: isSelected ? [46, 56] : [40, 48],
-        iconAnchor: isSelected ? [23, 56] : [20, 48]
+      const markerSvg = {
+        path: 'M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z',
+        fillColor: pinColor,
+        fillOpacity: 1,
+        strokeColor: '#FFFFFF',
+        strokeWeight: 2,
+        scale: isSelected ? 1.8 : 1.4,
+        anchor: new google.maps.Point(12, 22),
+      };
+
+      const marker = new google.maps.Marker({
+        position: { lat: store.lat, lng: store.lng },
+        map: mapRef.current,
+        icon: markerSvg,
+        title: store.name,
+        zIndex: isSelected ? 1000 : 1
       });
 
-      const marker = L.marker([store.lat, store.lng], { icon: customIcon, zIndexOffset: isSelected ? 1000 : 0 }).addTo(mapRef.current);
-      
-      marker.on('click', () => {
+      marker.addListener('click', () => {
         setDisplayedStores([store]); 
-        const currentZoom = mapRef.current.getZoom();
-        mapRef.current.flyTo([store.lat, store.lng], currentZoom, { animate: true, duration: 0.5 });
+        mapRef.current.panTo({ lat: store.lat, lng: store.lng });
       });
-      
+
       markersRef.current.push(marker);
     });
 
     if (displayedStores.length > 0 && !selectedDetailStore && lastSearchMode !== 'mapCenter') {
-      const bounds = L.latLngBounds(displayedStores.map(s => [s.lat, s.lng]));
-      mapRef.current.fitBounds(bounds, { paddingBottomRight: [10, 140], paddingTopLeft: [10, 160], maxZoom: 15 });
+      const bounds = new google.maps.LatLngBounds();
+      displayedStores.forEach(s => bounds.extend({ lat: s.lat, lng: s.lng }));
+      mapRef.current.fitBounds(bounds, { bottom: 140, top: 100, left: 20, right: 20 });
     }
   }, [stores, displayedStores, selectedDetailStore, lastSearchMode]);
 
@@ -408,11 +417,12 @@ export default function FullMapAIPortal() {
         searchLng = overrideLng;
       } else if (searchType === 'mapCenter' && mapRef.current) {
         const center = mapRef.current.getCenter();
-        searchLat = center.lat; searchLng = center.lng;
+        searchLat = center.lat(); searchLng = center.lng();
       }
 
       if (mapRef.current && searchType !== 'mapCenter') {
-        mapRef.current.flyTo([searchLat, searchLng], 15, { animate: true, duration: 1.0 });
+        mapRef.current.panTo({ lat: searchLat, lng: searchLng });
+        mapRef.current.setZoom(15);
       }
 
       const res = await fetch(`/api/places?keyword=${encodeURIComponent(keyword)}&lat=${searchLat}&lng=${searchLng}&t=${new Date().getTime()}`);
@@ -580,8 +590,7 @@ export default function FullMapAIPortal() {
     if (window.innerWidth < 768) setIsAiBoxMinimized(true); 
     
     if (mapRef.current) {
-      const currentZoom = mapRef.current.getZoom();
-      mapRef.current.flyTo([store.lat, store.lng], currentZoom, { animate: true, duration: 1.0 });
+      mapRef.current.panTo({ lat: store.lat, lng: store.lng });
     }
   };
 
@@ -642,7 +651,7 @@ export default function FullMapAIPortal() {
     <div className="relative w-screen h-[100dvh] overflow-hidden font-sans bg-[#FAF6F0] text-[#3D2E24]">
       <style>{hideScrollbarStyle}</style>
       
-      {/* 1. 全局地圖 */}
+      {/* 1. 全局地圖 (正版 Google Maps) */}
       <div id="full-map" className="absolute inset-0 z-0 h-full w-full"></div>
 
       {/* 2. 頂部 Header */}
@@ -726,7 +735,6 @@ export default function FullMapAIPortal() {
           <div className="bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[32px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 md:p-6 flex flex-col h-[55vh] md:h-[560px] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-[#B88746]/10 to-transparent pointer-events-none"></div>
             
-            {/* 手機版下拉收合提示條 */}
             <div className="w-full flex justify-center pb-3 md:hidden" onClick={() => { setIsAiBoxMinimized(true); setHasOpenedAi(true); }}>
                <div className="w-12 h-1.5 bg-[#D8C9BC] rounded-full cursor-pointer"></div>
             </div>
@@ -826,7 +834,7 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 🌟 底部店家精選卡片：顯示需求滿足標籤 */}
+      {/* 🌟 底部店家精選卡片 */}
       {displayedStores.length > 0 && !selectedDetailStore && (
         <div className="absolute bottom-4 md:bottom-8 left-0 right-0 z-20 px-4 md:px-6 md:pr-[440px] flex space-x-4 overflow-x-auto pb-4 snap-x hide-scrollbar pointer-events-auto">
           {displayedStores.map((store, index) => (
@@ -1113,7 +1121,7 @@ export default function FullMapAIPortal() {
                       type="text"
                       value={tempProfile.name}
                       onChange={(e) => setPetTempProfile({...tempProfile, name: e.target.value})}
-                      placeholder="例如：波波"
+                      placeholder="例如：來福"
                       className="w-full bg-[#F7F2EA] border border-[#E8DFD8] rounded-xl px-3 py-2.5 text-sm font-bold text-[#38312D] outline-none focus:ring-2 focus:ring-[#B88746]/20 focus:border-[#B88746]"
                     />
                   </div>
