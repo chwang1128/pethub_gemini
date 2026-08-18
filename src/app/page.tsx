@@ -4,7 +4,7 @@ import {
   Quote, PawPrint, Sparkles, Send, MapPin, 
   X, Coins, Star, RefreshCcw, Search, ChevronRight,
   Clock, Phone, Navigation, Map, MessageCircle, Globe, ChevronUp, ChevronDown,
-  Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText, Loader2
+  Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText
 } from 'lucide-react';
 
 interface PetProfile {
@@ -31,8 +31,6 @@ interface FaqHighlight {
   answer: string;
   sourceType: 'Google 顧客評論' | '商家官方簡介';
   sourceUrl: string;
-  quoteText?: string;
-  authorInfo?: string;
 }
 
 interface Store {
@@ -52,7 +50,6 @@ interface Store {
   phone?: string;
   openingHours?: string;
   website?: string;
-  realReviews?: Array<{ author: string; text: string; rating: number; relativeTime: string }>;
   requirementsStatus: RequirementTag[];
   allEssentialMet: boolean; 
   aiDetails: {
@@ -113,7 +110,7 @@ const parseStructuredRequirements = (query: string): { essential: string[]; opti
   if (essential.length === 0 && optional.length === 0) {
     const cleanQuery = query.replace(/(狗狗|貓咪|\?|？|請問|哪裡可以|帶|去|幫|找)/g, '').trim();
     if (cleanQuery) essential.push(cleanQuery);
-    else essential.push('寵物友善接待');
+    else essential.push('寵物設施與服務');
   }
 
   return { essential, optional };
@@ -233,9 +230,10 @@ export default function FullMapAIPortal() {
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
 
-  const [lastKeyword, setLastKeyword] = useState('寵物服務');
+  const [lastKeyword, setLastKeyword] = useState('寵物');
   const [showSearchHereBtn, setShowSearchHereBtn] = useState(false);
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>({ lat: 24.8013, lng: 120.9715 });
+  
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
   
   const mapRef = useRef<any>(null);
@@ -243,7 +241,6 @@ export default function FullMapAIPortal() {
   const userMarkerRef = useRef<any>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // 🌟 手機版體驗優化：進入畫面時，若為手機螢幕則自動縮小 AI 對話框
   useEffect(() => {
     if (window.innerWidth < 768) {
       setIsAiBoxMinimized(true);
@@ -280,7 +277,7 @@ export default function FullMapAIPortal() {
       const L = (window as any).L;
       if (!L || mapRef.current) return;
 
-      const map = L.map('full-map', { zoomControl: false, attributionControl: false }).setView([24.8013, 120.9715], 14);
+      const map = L.map('full-map', { zoomControl: false, attributionControl: false }).setView([25.0330, 121.5434], 14);
       L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png').addTo(map);
       mapRef.current = map;
       
@@ -307,6 +304,8 @@ export default function FullMapAIPortal() {
 
             userMarkerRef.current = L.marker([lat, lng], { icon: userIcon }).addTo(map).bindPopup("您的目前位置");
             map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
+
+            searchGooglePlaces('寵物', 'gps', lat, lng);
           },
           (error) => {
             if (error.code === error.PERMISSION_DENIED) {
@@ -314,13 +313,13 @@ export default function FullMapAIPortal() {
             } else {
               setLocationStatus('error');
             }
-            searchGooglePlaces('寵物友善', 'gps', 24.8013, 120.9715);
+            searchGooglePlaces('寵物', 'gps', 25.0330, 121.5434);
           },
           { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
         );
       } else {
         setLocationStatus('error');
-        searchGooglePlaces('寵物友善', 'gps', 24.8013, 120.9715);
+        searchGooglePlaces('寵物', 'gps', 25.0330, 121.5434);
       }
     };
     document.body.appendChild(script);
@@ -329,7 +328,7 @@ export default function FullMapAIPortal() {
   useEffect(() => {
     if (userLocation && !hasAutoSearched) {
       setHasAutoSearched(true);
-      searchGooglePlaces('寵物友善', 'gps');
+      searchGooglePlaces('寵物', 'gps');
     }
   }, [userLocation, hasAutoSearched]);
 
@@ -385,7 +384,7 @@ export default function FullMapAIPortal() {
     setShowSearchHereBtn(false);
     setLastKeyword(keyword);
     setSelectedDetailStore(null); 
-    if (window.innerWidth < 768) setIsAiBoxMinimized(true); // 手機版搜尋後自動收起 AI 框以展示結果
+    if (window.innerWidth < 768) setIsAiBoxMinimized(true);
 
     try {
       let searchLat = userLocation?.lat || 25.0330;
@@ -558,7 +557,7 @@ export default function FullMapAIPortal() {
   const openDetailModal = (store: Store) => {
     setSelectedDetailStore(store);
     setIsSheetExpanded(false);
-    if (window.innerWidth < 768) setIsAiBoxMinimized(true); // 🌟 點開店家詳情時自動收起 AI 框
+    if (window.innerWidth < 768) setIsAiBoxMinimized(true); 
     
     if (mapRef.current) {
       const L = (window as any).L;
@@ -715,7 +714,7 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 💻 電腦與手機共用對話視窗 (拔除 hidden md:flex) */}
+      {/* 💻 電腦與手機共用對話視窗 */}
       {!isAiBoxMinimized && (
         <div className="flex absolute bottom-0 md:bottom-6 md:right-6 w-full md:w-[400px] z-[70] flex-col pointer-events-none animate-in slide-in-from-bottom-10">
           <div className="bg-[#FFFDF9]/95 backdrop-blur-3xl rounded-t-[32px] md:rounded-[32px] shadow-[0_-20px_48px_rgba(56,49,45,0.12)] p-5 md:p-6 flex flex-col h-[55vh] md:h-[560px] ring-1 ring-[#E8DFD8] pointer-events-auto relative overflow-hidden">
@@ -790,20 +789,25 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 喚醒懸浮鈕 */}
+      {/* 🌟 喚醒懸浮鈕 (加入顯眼閃爍與浮動動畫) */}
       {isAiBoxMinimized && (
-        <div className={`absolute z-30 flex pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 ${
+        <div className={`absolute z-30 flex pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 animate-bounce ${
           displayedStores.length > 0 && !selectedDetailStore ? 'bottom-[130px] md:bottom-8' : 'bottom-6 md:bottom-8'
         }`}>
-          <button 
-            onClick={() => setIsAiBoxMinimized(false)} 
-            className="bg-[#FFFDF9]/95 backdrop-blur-xl shadow-[0_16px_32px_rgba(184,135,70,0.15)] rounded-full p-3 md:pl-5 md:pr-6 md:py-4 flex items-center space-x-3 active:scale-95 transition-all ring-1 ring-[#E8DFD8] hover:ring-[#B88746] group"
-          >
-            <div className="w-10 h-10 md:w-12 h-12 rounded-full bg-[#B88746] text-white flex items-center justify-center shadow-inner group-hover:animate-pulse">
-              <Sparkles className="w-5 h-5" />
-            </div>
-            <span className="hidden md:inline text-base font-black text-[#38312D]">喚醒 AI</span>
-          </button>
+          <div className="relative flex items-center justify-center">
+            {/* 🌟 持續擴散的呼吸光環 */}
+            <div className="absolute w-[120%] h-[120%] rounded-full bg-[#B88746]/30 animate-ping"></div>
+            
+            <button 
+              onClick={() => setIsAiBoxMinimized(false)} 
+              className="relative bg-[#FFFDF9] backdrop-blur-xl shadow-[0_12px_30px_rgba(184,135,70,0.4)] rounded-full p-3 md:pl-5 md:pr-6 md:py-4 flex items-center space-x-3 active:scale-95 transition-all ring-2 ring-[#B88746]/50"
+            >
+              <div className="w-12 h-12 md:w-12 md:h-12 rounded-full bg-gradient-to-tr from-[#A67C52] to-[#D4AF37] text-white flex items-center justify-center shadow-inner">
+                <Sparkles className="w-6 h-6 animate-pulse" />
+              </div>
+              <span className="hidden md:inline text-base font-black text-[#38312D]">喚醒 AI</span>
+            </button>
+          </div>
         </div>
       )}
 
