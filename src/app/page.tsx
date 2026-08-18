@@ -289,7 +289,7 @@ export default function FullMapAIPortal() {
             setLocationStatus('success');
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
-            setUserLocation({ lat, lng }); // 這會觸發下方 userLocation 的 useEffect 進行正確的首次搜尋
+            setUserLocation({ lat, lng });
             
             const userIcon = L.divIcon({
               className: 'custom-user-pin',
@@ -302,7 +302,11 @@ export default function FullMapAIPortal() {
             });
 
             userMarkerRef.current = L.marker([lat, lng], { icon: userIcon }).addTo(map).bindPopup("您的目前位置");
-            map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
+            
+            // 🌟 將初始定位的縮放層級從 15 提高到 16 (街道級)
+            map.flyTo([lat, lng], 16, { animate: true, duration: 1.5 });
+
+            searchGooglePlaces('寵物', 'gps', lat, lng, false);
           },
           (error) => {
             if (error.code === error.PERMISSION_DENIED) {
@@ -310,7 +314,6 @@ export default function FullMapAIPortal() {
             } else {
               setLocationStatus('error');
             }
-            // 只有定位失敗時，才用預設的台北座標並選擇一開始不顯示卡片
             searchGooglePlaces('寵物', 'gps', 25.0330, 121.5434, false);
           },
           { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
@@ -323,7 +326,6 @@ export default function FullMapAIPortal() {
     document.body.appendChild(script);
   }, []);
 
-  // 🌟 等到真的拿到使用者的 GPS 座標後，才發動第一次搜尋（一網打盡方圓內的店，且預設不秀出卡片）
   useEffect(() => {
     if (userLocation && !hasAutoSearched) {
       setHasAutoSearched(true);
@@ -335,11 +337,9 @@ export default function FullMapAIPortal() {
     const L = (window as any).L;
     if (!L || !mapRef.current) return;
 
-    // 清除舊標記
     markersRef.current.forEach(m => mapRef.current.removeLayer(m));
     markersRef.current = [];
 
-    // 🌟 為所有搜到的 stores 建立標記，而不是只有 displayedStores
     stores.forEach(store => {
       const isSelected = selectedDetailStore?.id === store.id || displayedStores.some(ds => ds.id === store.id);
       
@@ -364,23 +364,24 @@ export default function FullMapAIPortal() {
 
       const marker = L.marker([store.lat, store.lng], { icon: customIcon, zIndexOffset: isSelected ? 1000 : 0 }).addTo(mapRef.current);
       
-      // 🌟 點擊地圖標記時，讓下方彈出這個店家的小卡，且稍微置中地圖
       marker.on('click', () => {
-        setDisplayedStores([store]); // 這會觸發下方顯示該張小卡
-        mapRef.current.flyTo([store.lat, store.lng], 15, { animate: true, duration: 0.5 });
+        setDisplayedStores([store]); 
+        mapRef.current.flyTo([store.lat, store.lng], 16, { animate: true, duration: 0.5 });
       });
       
       markersRef.current.push(marker);
     });
 
-    // 調整地圖視野，盡可能將所有店家包進來
+    // 🌟 修正縮放邏輯：將使用者定位也納入計算，並將極限設為街道層次 (maxZoom: 16)
     if (stores.length > 0 && !selectedDetailStore) {
       const bounds = L.latLngBounds(stores.map(s => [s.lat, s.lng]));
-      mapRef.current.fitBounds(bounds, { paddingBottomRight: [10, 140], paddingTopLeft: [10, 160], maxZoom: 15 });
+      if (userLocation) {
+        bounds.extend([userLocation.lat, userLocation.lng]);
+      }
+      mapRef.current.fitBounds(bounds, { paddingBottomRight: [10, 140], paddingTopLeft: [10, 160], maxZoom: 16 });
     }
   }, [stores, displayedStores, selectedDetailStore]);
 
-  // 🌟 新增 showCards 參數，控制搜尋完後是否立刻在下方彈出卡片
   const searchGooglePlaces = async (
     keyword: string, 
     searchType: 'gps' | 'mapCenter' = 'gps',
@@ -452,7 +453,6 @@ export default function FullMapAIPortal() {
         
         setStores(allFetchedStores); 
 
-        // 🌟 如果指定不秀卡片 (例如一開始進來地圖)，就把 displayedStores 設為空
         if (showCards) {
           if (qualifiedStores.length > 0) {
             const sortedForCards = [...qualifiedStores].sort((a, b) => {
@@ -522,7 +522,6 @@ export default function FullMapAIPortal() {
         const targetLat = chatData.targetLocation?.lat || null;
         const targetLng = chatData.targetLocation?.lng || null;
 
-        // AI 搜尋結果一定會想展示給使用者看，所以這裡傳入 true
         const latestStores = await searchGooglePlaces(finalKeyword, 'gps', targetLat, targetLng, true);
 
         if (latestStores.length === 0) {
@@ -553,7 +552,6 @@ export default function FullMapAIPortal() {
           
           if (evalData.recommendedIds && Array.isArray(evalData.recommendedIds)) {
             if (evalData.recommendedIds.length > 0) {
-              // 🌟 修正從 latestStores 中精準過濾 AI 推薦的卡片
               setDisplayedStores(latestStores.filter((store: Store) => evalData.recommendedIds.includes(store.id)));
             } else {
                setDisplayedStores([]);
@@ -591,7 +589,7 @@ export default function FullMapAIPortal() {
           duration: 1.0
         });
       } else {
-        mapRef.current.flyTo([store.lat, store.lng], 15, { animate: true, duration: 1.0 });
+        mapRef.current.flyTo([store.lat, store.lng], 16, { animate: true, duration: 1.0 });
       }
     }
   };
@@ -620,7 +618,6 @@ export default function FullMapAIPortal() {
                          `💉 核心疫苗排程：\n「${tempProfile.vaccineName}」需每年補打，預計下次補打日為【${nextVacStr}】。`;
 
     setMessages(prev => [...prev, { sender: 'ai', text: healthReport }]);
-    // 修改生命檔案後，不主動塞卡片給家長，讓畫面維持乾淨
     searchGooglePlaces(lastKeyword, 'gps', null, null, false);
     
     if (isAiBoxMinimized) setIsAiBoxMinimized(false);
