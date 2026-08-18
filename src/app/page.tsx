@@ -4,7 +4,7 @@ import {
   Quote, PawPrint, Sparkles, Send, MapPin, 
   X, Coins, Star, RefreshCcw, Search, ChevronRight,
   Clock, Phone, Navigation, Map, MessageCircle, Globe, ChevronUp, ChevronDown,
-  Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText
+  Edit3, Heart, AlertCircle, Pill, Syringe, Activity, ExternalLink, CheckCircle2, XCircle, FileText, LocateFixed
 } from 'lucide-react';
 
 interface PetProfile {
@@ -278,7 +278,6 @@ export default function FullMapAIPortal() {
         streetViewControl: false,
         fullscreenControl: false,
         clickableIcons: false,
-        // 🌟 關鍵魔法：強力隱藏所有與寵物無關的地圖預設干擾物 (POI)
         styles: [
           { featureType: "poi", stylers: [{ visibility: "off" }] },
           { featureType: "transit", stylers: [{ visibility: "off" }] }
@@ -382,6 +381,7 @@ export default function FullMapAIPortal() {
 
       marker.addListener('click', () => {
         setDisplayedStores([store]); 
+        // 🌟 修正1：只做平移(panTo)，不做縮放設定，也不會觸發自動拉遠
         mapRef.current.panTo({ lat: store.lat, lng: store.lng });
       });
 
@@ -389,9 +389,14 @@ export default function FullMapAIPortal() {
     });
 
     if (displayedStores.length > 0 && !selectedDetailStore && lastSearchMode !== 'mapCenter') {
-      const bounds = new google.maps.LatLngBounds();
-      displayedStores.forEach(s => bounds.extend({ lat: s.lat, lng: s.lng }));
-      mapRef.current.fitBounds(bounds, { bottom: 140, top: 100, left: 20, right: 20 });
+      // 🌟 修正2：只有當「大於 1 家店」時，才進行地圖範圍縮放，單點只做移動
+      if (displayedStores.length === 1) {
+        mapRef.current.panTo({ lat: displayedStores[0].lat, lng: displayedStores[0].lng });
+      } else {
+        const bounds = new google.maps.LatLngBounds();
+        displayedStores.forEach(s => bounds.extend({ lat: s.lat, lng: s.lng }));
+        mapRef.current.fitBounds(bounds, { bottom: 140, top: 100, left: 20, right: 20 });
+      }
     }
   }, [stores, displayedStores, selectedDetailStore, lastSearchMode]);
 
@@ -591,6 +596,7 @@ export default function FullMapAIPortal() {
     if (window.innerWidth < 768) setIsAiBoxMinimized(true); 
     
     if (mapRef.current) {
+      // 🌟 修正3：點開卡片詳細資訊時，也只做平滑移動，不強制拉近拉遠
       mapRef.current.panTo({ lat: store.lat, lng: store.lng });
     }
   };
@@ -627,6 +633,16 @@ export default function FullMapAIPortal() {
     }
   };
 
+  // 🌟 新增：回到我的位置函數
+  const handleReturnToLocation = () => {
+    const lat = userLocation?.lat || 25.0330;
+    const lng = userLocation?.lng || 121.5434;
+    if (mapRef.current) {
+      mapRef.current.panTo({ lat, lng });
+      mapRef.current.setZoom(15);
+    }
+  };
+
   const handleNavigate = () => {
     if (selectedDetailStore) {
       window.open(`https://www.google.com/maps/dir/?api=1&destination=${selectedDetailStore.lat},${selectedDetailStore.lng}`, '_blank');
@@ -652,7 +668,7 @@ export default function FullMapAIPortal() {
     <div className="relative w-screen h-[100dvh] overflow-hidden font-sans bg-[#FAF6F0] text-[#3D2E24]">
       <style>{hideScrollbarStyle}</style>
       
-      {/* 1. 全局地圖 (正版 Google Maps) */}
+      {/* 1. 全局地圖 */}
       <div id="full-map" className="absolute inset-0 z-0 h-full w-full"></div>
 
       {/* 2. 頂部 Header */}
@@ -717,6 +733,15 @@ export default function FullMapAIPortal() {
           </div>
         </div>
       </header>
+
+      {/* 🌟 回到我的位置按鈕 */}
+      <button 
+        onClick={handleReturnToLocation}
+        className="absolute top-[80px] right-3 md:top-24 md:right-5 z-20 bg-[#FFFDF9]/90 backdrop-blur-xl shadow-[0_8px_24px_rgba(56,49,45,0.12)] rounded-full p-3 text-[#4A423D] hover:text-[#B88746] transition-all ring-1 ring-[#E8DFD8] active:scale-95"
+        title="回到我的位置"
+      >
+        <LocateFixed className="w-5 h-5 md:w-6 md:h-6" />
+      </button>
 
       {showSearchHereBtn && (
         <div className="absolute top-16 md:top-24 left-0 right-0 z-20 flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4">
