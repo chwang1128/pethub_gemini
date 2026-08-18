@@ -200,13 +200,14 @@ export default function FullMapAIPortal() {
   const [coins, setCoins] = useState(2000);
   const [isAiBoxMinimized, setIsAiBoxMinimized] = useState(false);
   
-  // 🌟 新增：紀錄使用者是否已經知道怎麼打開 AI 視窗了
+  // 🌟 紀錄使用者是否已經知道怎麼打開 AI 視窗了
   const [hasOpenedAi, setHasOpenedAi] = useState(false);
   
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle');
 
+  // 🌟 將預設名字從「波波」改為「來福」
   const [petProfile, setPetProfile] = useState<PetProfile>({
-    name: '波波',
+    name: '來福',
     type: 'dog',
     breed: '柴犬',
     birthday: '2023-04-15',
@@ -579,26 +580,8 @@ export default function FullMapAIPortal() {
     if (window.innerWidth < 768) setIsAiBoxMinimized(true); 
     
     if (mapRef.current) {
-      const L = (window as any).L;
-      
-      if (userLocation) {
-        const bounds = L.latLngBounds([
-          [userLocation.lat, userLocation.lng],
-          [store.lat, store.lng]
-        ]);
-
-        const isMobile = window.innerWidth < 768;
-        mapRef.current.fitBounds(bounds, {
-          paddingTopLeft: [50, 50],
-          paddingBottomRight: [isMobile ? 50 : 440, isMobile ? window.innerHeight * 0.52 : 50],
-          maxZoom: 16,
-          animate: true,
-          duration: 1.0
-        });
-      } else {
-        const currentZoom = mapRef.current.getZoom();
-        mapRef.current.flyTo([store.lat, store.lng], currentZoom, { animate: true, duration: 1.0 });
-      }
+      const currentZoom = mapRef.current.getZoom();
+      mapRef.current.flyTo([store.lat, store.lng], currentZoom, { animate: true, duration: 1.0 });
     }
   };
 
@@ -630,7 +613,7 @@ export default function FullMapAIPortal() {
     
     if (isAiBoxMinimized) {
       setIsAiBoxMinimized(false);
-      setHasOpenedAi(true); // 🌟 更新檔案後主動彈出對話，視同使用者已知 AI 視窗
+      setHasOpenedAi(true);
     }
   };
 
@@ -744,12 +727,10 @@ export default function FullMapAIPortal() {
             <div className="absolute top-0 left-0 right-0 h-40 bg-gradient-to-b from-[#B88746]/10 to-transparent pointer-events-none"></div>
             
             {/* 手機版下拉收合提示條 */}
-            {/* 🌟 點擊收合時，標記已開啟過 AI 視窗 */}
             <div className="w-full flex justify-center pb-3 md:hidden" onClick={() => { setIsAiBoxMinimized(true); setHasOpenedAi(true); }}>
                <div className="w-12 h-1.5 bg-[#D8C9BC] rounded-full cursor-pointer"></div>
             </div>
 
-            {/* 🌟 點擊叉號時，標記已開啟過 AI 視窗 */}
             <button 
               onClick={(e) => { e.stopPropagation(); setIsAiBoxMinimized(true); setHasOpenedAi(true); }} 
               className="absolute top-5 right-5 text-[#A67C52] hover:text-[#38312D] bg-white/60 hover:bg-white shadow-sm p-2 rounded-full z-[100] transition-all cursor-pointer ring-1 ring-black/5"
@@ -814,13 +795,12 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 🌟 喚醒懸浮鈕 (加入顯眼閃爍與新手引導提示) */}
+      {/* 🌟 喚醒懸浮鈕 */}
       {isAiBoxMinimized && (
         <div className={`absolute z-30 flex flex-col items-end pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 animate-bounce ${
           displayedStores.length > 0 && !selectedDetailStore ? 'bottom-[130px] md:bottom-8' : 'bottom-6 md:bottom-8'
         }`}>
           
-          {/* 🌟 新增的新手引導提示：如果沒點開過，就會顯示這個氣泡 */}
           {!hasOpenedAi && (
             <div className="mb-2 mr-2 flex flex-col items-center pointer-events-none">
               <div className="bg-[#E07A5F] text-white text-[13px] font-black px-4 py-2 rounded-2xl shadow-xl flex items-center space-x-1">
@@ -831,11 +811,10 @@ export default function FullMapAIPortal() {
           )}
 
           <div className="relative flex items-center justify-center">
-            {/* 持續擴散的呼吸光環 */}
             <div className="absolute w-[120%] h-[120%] rounded-full bg-[#B88746]/30 animate-ping"></div>
             
             <button 
-              onClick={() => { setIsAiBoxMinimized(false); setHasOpenedAi(true); }} // 🌟 點擊後標記為已知，隱藏提示
+              onClick={() => { setIsAiBoxMinimized(false); setHasOpenedAi(true); }} 
               className="relative bg-[#FFFDF9] backdrop-blur-xl shadow-[0_12px_30px_rgba(184,135,70,0.4)] rounded-full p-3 md:pl-5 md:pr-6 md:py-4 flex items-center space-x-3 active:scale-95 transition-all ring-2 ring-[#B88746]/50"
             >
               <div className="w-12 h-12 md:w-12 md:h-12 rounded-full bg-gradient-to-tr from-[#A67C52] to-[#D4AF37] text-white flex items-center justify-center shadow-inner">
