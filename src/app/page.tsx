@@ -230,7 +230,6 @@ export default function FullMapAIPortal() {
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
 
   const [lastKeyword, setLastKeyword] = useState('寵物');
-  // 🌟 記錄最後一次搜尋的模式，用來判斷地圖該不該自動縮放
   const [lastSearchMode, setLastSearchMode] = useState<'gps' | 'mapCenter'>('gps');
   const [showSearchHereBtn, setShowSearchHereBtn] = useState(false);
   
@@ -283,7 +282,6 @@ export default function FullMapAIPortal() {
       mapRef.current = map;
       
       map.on('dragend', () => setShowSearchHereBtn(true));
-      // 當使用者手動縮放時，也顯示「搜尋此區域」
       map.on('zoomend', () => setShowSearchHereBtn(true));
 
       if ('geolocation' in navigator) {
@@ -369,20 +367,16 @@ export default function FullMapAIPortal() {
       
       marker.on('click', () => {
         setDisplayedStores([store]); 
-        // 點擊地標時也維持目前的縮放倍率，不再固定回到 15
-        const currentZoom = mapRef.current.getZoom();
-        mapRef.current.flyTo([store.lat, store.lng], currentZoom, { animate: true, duration: 0.5 });
+        mapRef.current.flyTo([store.lat, store.lng], 16, { animate: true, duration: 0.5 });
       });
       
       markersRef.current.push(marker);
     });
 
-    // 🌟 核心修正：如果剛剛是按「搜尋此區域」 (mapCenter)，我們絕對不要自動改變使用者的視野
+    // 🌟 核心修正：移除 bounds.extend(userLocation)
+    // 當有卡片顯示時，地圖只包覆「搜尋出來的店家」，不再強制把「你的定位點」塞進畫面中
     if (displayedStores.length > 0 && !selectedDetailStore && lastSearchMode !== 'mapCenter') {
       const bounds = L.latLngBounds(displayedStores.map(s => [s.lat, s.lng]));
-      if (userLocation) {
-        bounds.extend([userLocation.lat, userLocation.lng]);
-      }
       mapRef.current.fitBounds(bounds, { paddingBottomRight: [10, 140], paddingTopLeft: [10, 160], maxZoom: 15 });
     }
   }, [stores, displayedStores, selectedDetailStore, lastSearchMode]);
@@ -397,7 +391,7 @@ export default function FullMapAIPortal() {
     setIsLoading(true);
     setShowSearchHereBtn(false);
     setLastKeyword(keyword);
-    setLastSearchMode(searchType); // 🌟 記錄這次搜尋是從哪裡來的
+    setLastSearchMode(searchType); 
     setSelectedDetailStore(null); 
     if (window.innerWidth < 768 && showCards) setIsAiBoxMinimized(true);
 
@@ -413,7 +407,6 @@ export default function FullMapAIPortal() {
         searchLat = center.lat; searchLng = center.lng;
       }
 
-      // 🌟 修正：只有在非「搜尋此區域」時，才強制鎖定視角。如果是「搜尋此區域」，地圖就乖乖待在原地！
       if (mapRef.current && searchType !== 'mapCenter') {
         mapRef.current.flyTo([searchLat, searchLng], 15, { animate: true, duration: 1.0 });
       }
@@ -583,27 +576,8 @@ export default function FullMapAIPortal() {
     if (window.innerWidth < 768) setIsAiBoxMinimized(true); 
     
     if (mapRef.current) {
-      const L = (window as any).L;
-      
-      if (userLocation) {
-        const bounds = L.latLngBounds([
-          [userLocation.lat, userLocation.lng],
-          [store.lat, store.lng]
-        ]);
-
-        const isMobile = window.innerWidth < 768;
-        // 🌟 打開卡片時也避免將畫面大幅拉遠
-        mapRef.current.fitBounds(bounds, {
-          paddingTopLeft: [50, 50],
-          paddingBottomRight: [isMobile ? 50 : 440, isMobile ? window.innerHeight * 0.52 : 50],
-          maxZoom: 16,
-          animate: true,
-          duration: 1.0
-        });
-      } else {
-        const currentZoom = mapRef.current.getZoom();
-        mapRef.current.flyTo([store.lat, store.lng], currentZoom, { animate: true, duration: 1.0 });
-      }
+      // 🌟 點擊詳細資訊卡片時，直接平滑移動到店家，不再強制包含 userLocation
+      mapRef.current.flyTo([store.lat, store.lng], 16, { animate: true, duration: 1.0 });
     }
   };
 
