@@ -17,8 +17,8 @@ export async function GET(req: Request) {
   const cleanKeyword = rawKeyword.replace(/(狗狗|貓咪|\?|？|請問|我要找|想找)/g, '').trim() || '寵物';
 
   try {
-    // 🌟 將 radius 調整為 5000 (方圓 5 公里)，鎖定周邊店家
-    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(cleanKeyword)}&location=${lat},${lng}&radius=5000&language=zh-TW&key=${apiKey}`;
+    // 🌟 將 radius 縮小為 2000 (方圓 2 公里)，讓 20 筆結果高度集中在使用者周邊
+    const searchUrl = `https://maps.googleapis.com/maps/api/place/textsearch/json?query=${encodeURIComponent(cleanKeyword)}&location=${lat},${lng}&radius=2000&language=zh-TW&key=${apiKey}`;
     const searchRes = await fetch(searchUrl);
     const searchData = await searchRes.json();
 
