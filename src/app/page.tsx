@@ -225,8 +225,7 @@ export default function FullMapAIPortal() {
   const [displayedStores, setDisplayedStores] = useState<Store[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isAiTyping, setIsAiTyping] = useState(false); 
-  const [isAnalyzingDetail, setIsAnalyzingDetail] = useState(false);
-
+  
   const [selectedDetailStore, setSelectedDetailStore] = useState<Store | null>(null);
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
 
@@ -290,7 +289,7 @@ export default function FullMapAIPortal() {
             setLocationStatus('success');
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
-            setUserLocation({ lat, lng });
+            setUserLocation({ lat, lng }); // 這會觸發下方 userLocation 的 useEffect 進行正確的首次搜尋
             
             const userIcon = L.divIcon({
               className: 'custom-user-pin',
@@ -304,8 +303,6 @@ export default function FullMapAIPortal() {
 
             userMarkerRef.current = L.marker([lat, lng], { icon: userIcon }).addTo(map).bindPopup("您的目前位置");
             map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
-
-            searchGooglePlaces('寵物', 'gps', lat, lng);
           },
           (error) => {
             if (error.code === error.PERMISSION_DENIED) {
@@ -313,22 +310,24 @@ export default function FullMapAIPortal() {
             } else {
               setLocationStatus('error');
             }
-            searchGooglePlaces('寵物', 'gps', 25.0330, 121.5434);
+            // 只有定位失敗時，才用預設的台北座標並選擇一開始不顯示卡片
+            searchGooglePlaces('寵物', 'gps', 25.0330, 121.5434, false);
           },
           { enableHighAccuracy: true, timeout: 8000, maximumAge: 0 }
         );
       } else {
         setLocationStatus('error');
-        searchGooglePlaces('寵物', 'gps', 25.0330, 121.5434);
+        searchGooglePlaces('寵物', 'gps', 25.0330, 121.5434, false);
       }
     };
     document.body.appendChild(script);
   }, []);
 
+  // 🌟 等到真的拿到使用者的 GPS 座標後，才發動第一次搜尋（一網打盡方圓內的店，且預設不秀出卡片）
   useEffect(() => {
     if (userLocation && !hasAutoSearched) {
       setHasAutoSearched(true);
-      searchGooglePlaces('寵物', 'gps');
+      searchGooglePlaces('寵物', 'gps', userLocation.lat, userLocation.lng, false);
     }
   }, [userLocation, hasAutoSearched]);
 
@@ -336,11 +335,13 @@ export default function FullMapAIPortal() {
     const L = (window as any).L;
     if (!L || !mapRef.current) return;
 
+    // 清除舊標記
     markersRef.current.forEach(m => mapRef.current.removeLayer(m));
     markersRef.current = [];
 
+    // 🌟 為所有搜到的 stores 建立標記，而不是只有 displayedStores
     stores.forEach(store => {
-      const isSelected = selectedDetailStore?.id === store.id;
+      const isSelected = selectedDetailStore?.id === store.id || displayedStores.some(ds => ds.id === store.id);
       
       const pinBg = isSelected ? 'bg-[#E07A5F]' : 'bg-[#B88746]';
       const pinShadow = isSelected ? 'shadow-[0_8px_24px_rgba(224,122,95,0.6)]' : 'shadow-[0_6px_16px_rgba(184,135,70,0.35)]';
@@ -361,30 +362,37 @@ export default function FullMapAIPortal() {
         iconAnchor: isSelected ? [23, 56] : [20, 48]
       });
 
-      if (displayedStores.some(ds => ds.id === store.id)) {
-        const marker = L.marker([store.lat, store.lng], { icon: customIcon, zIndexOffset: isSelected ? 1000 : 0 }).addTo(mapRef.current);
-        marker.on('click', () => openDetailModal(store));
-        markersRef.current.push(marker);
-      }
+      const marker = L.marker([store.lat, store.lng], { icon: customIcon, zIndexOffset: isSelected ? 1000 : 0 }).addTo(mapRef.current);
+      
+      // 🌟 點擊地圖標記時，讓下方彈出這個店家的小卡，且稍微置中地圖
+      marker.on('click', () => {
+        setDisplayedStores([store]); // 這會觸發下方顯示該張小卡
+        mapRef.current.flyTo([store.lat, store.lng], 15, { animate: true, duration: 0.5 });
+      });
+      
+      markersRef.current.push(marker);
     });
 
-    if (displayedStores.length > 0 && !selectedDetailStore) {
-      const bounds = L.latLngBounds(displayedStores.map(s => [s.lat, s.lng]));
+    // 調整地圖視野，盡可能將所有店家包進來
+    if (stores.length > 0 && !selectedDetailStore) {
+      const bounds = L.latLngBounds(stores.map(s => [s.lat, s.lng]));
       mapRef.current.fitBounds(bounds, { paddingBottomRight: [10, 140], paddingTopLeft: [10, 160], maxZoom: 15 });
     }
   }, [stores, displayedStores, selectedDetailStore]);
 
+  // 🌟 新增 showCards 參數，控制搜尋完後是否立刻在下方彈出卡片
   const searchGooglePlaces = async (
     keyword: string, 
     searchType: 'gps' | 'mapCenter' = 'gps',
     overrideLat: number | null = null,
-    overrideLng: number | null = null
+    overrideLng: number | null = null,
+    showCards: boolean = true
   ) => {
     setIsLoading(true);
     setShowSearchHereBtn(false);
     setLastKeyword(keyword);
     setSelectedDetailStore(null); 
-    if (window.innerWidth < 768) setIsAiBoxMinimized(true);
+    if (window.innerWidth < 768 && showCards) setIsAiBoxMinimized(true);
 
     try {
       let searchLat = userLocation?.lat || 25.0330;
@@ -441,31 +449,37 @@ export default function FullMapAIPortal() {
         });
 
         const qualifiedStores = allFetchedStores.filter(s => s.allEssentialMet);
+        
+        setStores(allFetchedStores); 
 
-        if (qualifiedStores.length > 0) {
-          const sortedForCards = [...qualifiedStores].sort((a, b) => {
-            const metCountA = a.requirementsStatus.filter(r => r.met).length;
-            const metCountB = b.requirementsStatus.filter(r => r.met).length;
-            return (metCountB * 100 - (b.distanceKm || 0)) - (metCountA * 100 - (a.distanceKm || 0));
-          });
-
-          setStores(allFetchedStores); 
-          const topStores = sortedForCards.slice(0, 3);
-          setDisplayedStores(topStores);
-          return topStores;
-
+        // 🌟 如果指定不秀卡片 (例如一開始進來地圖)，就把 displayedStores 設為空
+        if (showCards) {
+          if (qualifiedStores.length > 0) {
+            const sortedForCards = [...qualifiedStores].sort((a, b) => {
+              const metCountA = a.requirementsStatus.filter(r => r.met).length;
+              const metCountB = b.requirementsStatus.filter(r => r.met).length;
+              return (metCountB * 100 - (b.distanceKm || 0)) - (metCountA * 100 - (a.distanceKm || 0));
+            });
+            const topStores = sortedForCards.slice(0, 3);
+            setDisplayedStores(topStores);
+            return topStores;
+          } else {
+            setDisplayedStores([]); 
+            return [];
+          }
         } else {
-          setStores(allFetchedStores);
-          setDisplayedStores([]); 
-          return [];
+          setDisplayedStores([]);
+          return allFetchedStores;
         }
 
       } else {
+        setStores([]);
         setDisplayedStores([]);
         return [];
       }
     } catch (error) {
       console.error(error);
+      setStores([]);
       setDisplayedStores([]);
       return [];
     } finally {
@@ -508,7 +522,8 @@ export default function FullMapAIPortal() {
         const targetLat = chatData.targetLocation?.lat || null;
         const targetLng = chatData.targetLocation?.lng || null;
 
-        const latestStores = await searchGooglePlaces(finalKeyword, 'gps', targetLat, targetLng);
+        // AI 搜尋結果一定會想展示給使用者看，所以這裡傳入 true
+        const latestStores = await searchGooglePlaces(finalKeyword, 'gps', targetLat, targetLng, true);
 
         if (latestStores.length === 0) {
            setMessages(prev => [...prev, { sender: 'ai', text: '抱歉，系統在該地區附近暫時找不到符合條件的店家。' }]);
@@ -538,9 +553,8 @@ export default function FullMapAIPortal() {
           
           if (evalData.recommendedIds && Array.isArray(evalData.recommendedIds)) {
             if (evalData.recommendedIds.length > 0) {
-              setDisplayedStores(prevStores => 
-                prevStores.filter(store => evalData.recommendedIds.includes(store.id))
-              );
+              // 🌟 修正從 latestStores 中精準過濾 AI 推薦的卡片
+              setDisplayedStores(latestStores.filter((store: Store) => evalData.recommendedIds.includes(store.id)));
             } else {
                setDisplayedStores([]);
             }
@@ -606,7 +620,8 @@ export default function FullMapAIPortal() {
                          `💉 核心疫苗排程：\n「${tempProfile.vaccineName}」需每年補打，預計下次補打日為【${nextVacStr}】。`;
 
     setMessages(prev => [...prev, { sender: 'ai', text: healthReport }]);
-    searchGooglePlaces(lastKeyword, 'gps');
+    // 修改生命檔案後，不主動塞卡片給家長，讓畫面維持乾淨
+    searchGooglePlaces(lastKeyword, 'gps', null, null, false);
     
     if (isAiBoxMinimized) setIsAiBoxMinimized(false);
   };
@@ -664,7 +679,7 @@ export default function FullMapAIPortal() {
             {QUICK_FILTERS.map(filter => (
               <button
                 key={filter.label}
-                onClick={() => searchGooglePlaces(filter.query, showSearchHereBtn ? 'mapCenter' : 'gps')}
+                onClick={() => searchGooglePlaces(filter.query, showSearchHereBtn ? 'mapCenter' : 'gps', null, null, true)}
                 className={`${glassmorphism} flex items-center space-x-2 px-4 py-2.5 rounded-full text-sm font-bold text-[#4A423D] hover:text-[#B88746] hover:bg-[#F7F2EA] transition-all shrink-0`}
               >
                 <span className="text-base">{filter.icon}</span>
@@ -705,7 +720,7 @@ export default function FullMapAIPortal() {
       {showSearchHereBtn && (
         <div className="absolute top-16 md:top-24 left-0 right-0 z-20 flex justify-center pointer-events-none animate-in fade-in slide-in-from-top-4">
           <button 
-            onClick={() => searchGooglePlaces(lastKeyword, 'mapCenter')}
+            onClick={() => searchGooglePlaces(lastKeyword, 'mapCenter', null, null, true)}
             className="bg-[#38312D]/90 backdrop-blur-xl shadow-[0_12px_24px_rgba(56,49,45,0.2)] rounded-full px-5 py-2.5 md:px-6 md:py-3 flex items-center space-x-2 text-white pointer-events-auto hover:bg-[#2A2320] transition-all active:scale-95"
           >
             <RefreshCcw className="w-4 h-4" />
@@ -795,7 +810,7 @@ export default function FullMapAIPortal() {
           displayedStores.length > 0 && !selectedDetailStore ? 'bottom-[130px] md:bottom-8' : 'bottom-6 md:bottom-8'
         }`}>
           <div className="relative flex items-center justify-center">
-            {/* 🌟 持續擴散的呼吸光環 */}
+            {/* 持續擴散的呼吸光環 */}
             <div className="absolute w-[120%] h-[120%] rounded-full bg-[#B88746]/30 animate-ping"></div>
             
             <button 
