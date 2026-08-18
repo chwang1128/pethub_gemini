@@ -230,6 +230,8 @@ export default function FullMapAIPortal() {
   const [isSheetExpanded, setIsSheetExpanded] = useState(false);
 
   const [lastKeyword, setLastKeyword] = useState('寵物');
+  // 🌟 記錄最後一次搜尋的模式，用來判斷地圖該不該自動縮放
+  const [lastSearchMode, setLastSearchMode] = useState<'gps' | 'mapCenter'>('gps');
   const [showSearchHereBtn, setShowSearchHereBtn] = useState(false);
   
   const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
@@ -281,6 +283,8 @@ export default function FullMapAIPortal() {
       mapRef.current = map;
       
       map.on('dragend', () => setShowSearchHereBtn(true));
+      // 當使用者手動縮放時，也顯示「搜尋此區域」
+      map.on('zoomend', () => setShowSearchHereBtn(true));
 
       if ('geolocation' in navigator) {
         setLocationStatus('loading');
@@ -303,7 +307,6 @@ export default function FullMapAIPortal() {
 
             userMarkerRef.current = L.marker([lat, lng], { icon: userIcon }).addTo(map).bindPopup("您的目前位置");
             
-            // 🌟 首次定位成功後，強迫鎖定放大到層級 15
             map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
 
             searchGooglePlaces('寵物', 'gps', lat, lng, false);
@@ -366,22 +369,23 @@ export default function FullMapAIPortal() {
       
       marker.on('click', () => {
         setDisplayedStores([store]); 
-        // 點擊卡片時，維持 15 倍高放大率
-        mapRef.current.flyTo([store.lat, store.lng], 15, { animate: true, duration: 0.5 });
+        // 點擊地標時也維持目前的縮放倍率，不再固定回到 15
+        const currentZoom = mapRef.current.getZoom();
+        mapRef.current.flyTo([store.lat, store.lng], currentZoom, { animate: true, duration: 0.5 });
       });
       
       markersRef.current.push(marker);
     });
 
-    if (displayedStores.length > 0 && !selectedDetailStore) {
+    // 🌟 核心修正：如果剛剛是按「搜尋此區域」 (mapCenter)，我們絕對不要自動改變使用者的視野
+    if (displayedStores.length > 0 && !selectedDetailStore && lastSearchMode !== 'mapCenter') {
       const bounds = L.latLngBounds(displayedStores.map(s => [s.lat, s.lng]));
       if (userLocation) {
         bounds.extend([userLocation.lat, userLocation.lng]);
       }
-      // 🌟 將自動適應視角的縮放極限從 14 或 16，統一鎖定為 15，維持一致的街道體驗
       mapRef.current.fitBounds(bounds, { paddingBottomRight: [10, 140], paddingTopLeft: [10, 160], maxZoom: 15 });
     }
-  }, [stores, displayedStores, selectedDetailStore]);
+  }, [stores, displayedStores, selectedDetailStore, lastSearchMode]);
 
   const searchGooglePlaces = async (
     keyword: string, 
@@ -393,6 +397,7 @@ export default function FullMapAIPortal() {
     setIsLoading(true);
     setShowSearchHereBtn(false);
     setLastKeyword(keyword);
+    setLastSearchMode(searchType); // 🌟 記錄這次搜尋是從哪裡來的
     setSelectedDetailStore(null); 
     if (window.innerWidth < 768 && showCards) setIsAiBoxMinimized(true);
 
@@ -408,8 +413,8 @@ export default function FullMapAIPortal() {
         searchLat = center.lat; searchLng = center.lng;
       }
 
-      // 🌟 發動搜尋時，強制將視角鎖定在搜尋中心，維持高倍率 (層級 15)
-      if (mapRef.current) {
+      // 🌟 修正：只有在非「搜尋此區域」時，才強制鎖定視角。如果是「搜尋此區域」，地圖就乖乖待在原地！
+      if (mapRef.current && searchType !== 'mapCenter') {
         mapRef.current.flyTo([searchLat, searchLng], 15, { animate: true, duration: 1.0 });
       }
 
@@ -587,15 +592,17 @@ export default function FullMapAIPortal() {
         ]);
 
         const isMobile = window.innerWidth < 768;
+        // 🌟 打開卡片時也避免將畫面大幅拉遠
         mapRef.current.fitBounds(bounds, {
           paddingTopLeft: [50, 50],
           paddingBottomRight: [isMobile ? 50 : 440, isMobile ? window.innerHeight * 0.52 : 50],
-          maxZoom: 15,
+          maxZoom: 16,
           animate: true,
           duration: 1.0
         });
       } else {
-        mapRef.current.flyTo([store.lat, store.lng], 15, { animate: true, duration: 1.0 });
+        const currentZoom = mapRef.current.getZoom();
+        mapRef.current.flyTo([store.lat, store.lng], currentZoom, { animate: true, duration: 1.0 });
       }
     }
   };
@@ -807,13 +814,12 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 🌟 喚醒懸浮鈕 (加入顯眼閃爍與浮動動畫) */}
+      {/* 🌟 喚醒懸浮鈕 */}
       {isAiBoxMinimized && (
         <div className={`absolute z-30 flex pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 animate-bounce ${
           displayedStores.length > 0 && !selectedDetailStore ? 'bottom-[130px] md:bottom-8' : 'bottom-6 md:bottom-8'
         }`}>
           <div className="relative flex items-center justify-center">
-            {/* 持續擴散的呼吸光環 */}
             <div className="absolute w-[120%] h-[120%] rounded-full bg-[#B88746]/30 animate-ping"></div>
             
             <button 
@@ -829,7 +835,7 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 🌟 底部店家精選卡片：顯示需求滿足標籤 */}
+      {/* 🌟 底部店家精選卡片 */}
       {displayedStores.length > 0 && !selectedDetailStore && (
         <div className="absolute bottom-4 md:bottom-8 left-0 right-0 z-20 px-4 md:px-6 md:pr-[440px] flex space-x-4 overflow-x-auto pb-4 snap-x hide-scrollbar pointer-events-auto">
           {displayedStores.map((store, index) => (
