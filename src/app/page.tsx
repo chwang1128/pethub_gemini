@@ -233,7 +233,7 @@ export default function FullMapAIPortal() {
 
   const [lastKeyword, setLastKeyword] = useState('寵物服務');
   const [showSearchHereBtn, setShowSearchHereBtn] = useState(false);
-  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>(null);
+  const [userLocation, setUserLocation] = useState<{lat: number, lng: number} | null>({ lat: 25.0330, lng: 121.5434 });
   const [hasAutoSearched, setHasAutoSearched] = useState(false);
   
   const mapRef = useRef<any>(null);
@@ -305,12 +305,13 @@ export default function FullMapAIPortal() {
             } else {
               setLocationStatus('error');
             }
-            setMessages(prev => [...prev, { sender: 'ai', text: '⚠️ 定位存取失敗，已為您預設於台北市中心。' }]);
+            searchGooglePlaces('寵物友善', 'gps', 25.0330, 121.5434);
           },
           { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
         );
       } else {
         setLocationStatus('error');
+        searchGooglePlaces('寵物友善', 'gps', 25.0330, 121.5434);
       }
     };
     document.body.appendChild(script);
@@ -365,11 +366,11 @@ export default function FullMapAIPortal() {
     }
   }, [stores, displayedStores, selectedDetailStore]);
 
-  // 🌟 加入 overrideLat 與 overrideLng，接收 AI 指令的跨區座標
+  // 🌟 支援 AI 跨區座標導航 (overrideLat / overrideLng)
   const searchGooglePlaces = async (
     keyword: string, 
-    searchType: 'gps' | 'mapCenter' = 'gps', 
-    overrideLat: number | null = null, 
+    searchType: 'gps' | 'mapCenter' = 'gps',
+    overrideLat: number | null = null,
     overrideLng: number | null = null
   ) => {
     setIsLoading(true);
@@ -378,22 +379,19 @@ export default function FullMapAIPortal() {
     setSelectedDetailStore(null); 
 
     try {
-      let searchLat = 25.0330, searchLng = 121.5434;
-      
-      // 🌟 如果 AI 有回傳指定縣市座標，就強迫地圖以新座標為中心去搜尋！
+      let searchLat = userLocation?.lat || 25.0330;
+      let searchLng = userLocation?.lng || 121.5434;
+
       if (overrideLat !== null && overrideLng !== null) {
         searchLat = overrideLat;
         searchLng = overrideLng;
       } else if (searchType === 'mapCenter' && mapRef.current) {
         const center = mapRef.current.getCenter();
         searchLat = center.lat; searchLng = center.lng;
-      } else if (userLocation) {
-        searchLat = userLocation.lat; searchLng = userLocation.lng;
       }
 
-      const speciesPrefix = petProfile.type === 'dog' ? '狗狗' : '貓咪';
-      const queryKeyword = `${speciesPrefix} ${keyword}`;
-      const res = await fetch(`/api/places?keyword=${encodeURIComponent(queryKeyword)}&lat=${searchLat}&lng=${searchLng}&t=${new Date().getTime()}`);
+      // 🌟 剔除「狗狗」、「貓咪」這類前端硬加上去的詞彙，直接送乾淨的 keyword
+      const res = await fetch(`/api/places?keyword=${encodeURIComponent(keyword)}&lat=${searchLat}&lng=${searchLng}&t=${new Date().getTime()}`);
       if (!res.ok) throw new Error('API Error');
       
       const data = await res.json();
@@ -404,37 +402,29 @@ export default function FullMapAIPortal() {
         let allFetchedStores: Store[] = data.results.map((place: any, index: number) => {
           const rating = place.rating || 4.5;
           const reviewsCount = place.user_ratings_total || Math.floor(Math.random() * 50) + 10;
-          const distanceKm = calculateDistance(searchLat, searchLng, place.geometry.location.lat, place.geometry.location.lng);
+          const distanceKm = calculateDistance(searchLat, searchLng, place.geometry?.location?.lat || searchLat, place.geometry?.location?.lng || searchLng);
           const distanceText = distanceKm < 1 ? `${Math.round(distanceKm * 1000)}m` : `${distanceKm.toFixed(1)}km`;
 
-          const defaultDogs = [
-            'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&q=80',
-            'https://images.unsplash.com/photo-1601758124510-52d02ddb7cbd?auto=format&fit=crop&w=600&q=80',
-            'https://images.unsplash.com/photo-1583337130417-3346a1be7dee?auto=format&fit=crop&w=600&q=80'
-          ];
-          const defaultCats = [
-            'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=600&q=80',
-            'https://images.unsplash.com/photo-1495360010541-f48722b34f7d?auto=format&fit=crop&w=600&q=80',
-            'https://images.unsplash.com/photo-1573865526739-10659fec78a5?auto=format&fit=crop&w=600&q=80'
-          ];
-          const defaultImg = petProfile.type === 'dog' ? defaultDogs[index % 3] : defaultCats[index % 3];
+          const defaultImg = petProfile.type === 'dog' 
+            ? 'https://images.unsplash.com/photo-1548199973-03cce0bbc87b?auto=format&fit=crop&w=600&q=80'
+            : 'https://images.unsplash.com/photo-1514888286974-6c03e2ca1dba?auto=format&fit=crop&w=600&q=80';
 
           const aiDetails = generateDynamicAiAnalysis(place.name, keyword, rating, reviewsCount, place.place_id, allUserReqs);
-          const { tags, allEssentialMet } = evaluateStoreRequirements(place.name, essential, optional, place.place_id);
+          const { tags, allEssentialMet } = evaluateStoreRequirements(place.name, essential, optional, place.place_id || String(index));
 
           return {
-            id: place.place_id,
-            name: place.name,
+            id: place.place_id || `place_${index}`,
+            name: place.name || '寵物服務',
             category: 'general',
-            lat: place.geometry.location.lat,
-            lng: place.geometry.location.lng,
+            lat: place.geometry?.location?.lat || searchLat,
+            lng: place.geometry?.location?.lng || searchLng,
             rating, reviewsCount,
-            address: place.vicinity || '地址資訊未提供',
-            phone: '03-571-2345',
-            openingHours: '星期一至日 • 09:30 - 21:00',
-            website: place.website || `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
+            address: place.formatted_address || place.vicinity || '地址資訊未提供',
+            phone: '營業資訊請參考官方網站',
+            openingHours: '營業時間請洽官方',
+            website: `https://www.google.com/maps/place/?q=place_id:${place.place_id}`,
             price: '需洽詢',
-            photoUrl: place.photoUrl || defaultImg,
+            photoUrl: place.photoUrl || defaultImg, // 使用 API 傳來的真實照片
             distanceKm, distanceText,
             requirementsStatus: tags,
             allEssentialMet,
@@ -469,6 +459,7 @@ export default function FullMapAIPortal() {
       }
     } catch (error) {
       console.error(error);
+      setDisplayedStores([]);
       return [];
     } finally {
       setIsLoading(false);
@@ -507,12 +498,16 @@ export default function FullMapAIPortal() {
         setMessages(prev => [...prev, { sender: 'ai', text: chatData.reply }]);
         
         const finalKeyword = chatData.keyword || text;
-        
-        // 🌟 關鍵：將 AI 給的目標地點座標傳給搜尋系統
         const targetLat = chatData.targetLocation?.lat || null;
         const targetLng = chatData.targetLocation?.lng || null;
-        
+
         const latestStores = await searchGooglePlaces(finalKeyword, 'gps', targetLat, targetLng);
+
+        if (latestStores.length === 0) {
+           setMessages(prev => [...prev, { sender: 'ai', text: '抱歉，系統在該地區附近暫時找不到符合條件的店家。' }]);
+           setIsAiTyping(false);
+           return;
+        }
 
         const evalRes = await fetch('/api/chat', {
           method: 'POST',
