@@ -202,7 +202,6 @@ export default function FullMapAIPortal() {
   const [hasOpenedAi, setHasOpenedAi] = useState(false);
   const [locationStatus, setLocationStatus] = useState<'idle' | 'loading' | 'success' | 'denied' | 'error'>('idle');
 
-  // 🌟 語音辨識狀態
   const [isListening, setIsListening] = useState(false);
 
   const [petProfile, setPetProfile] = useState<PetProfile>({
@@ -347,7 +346,9 @@ export default function FullMapAIPortal() {
 
             userMarkerRef.current = new UserLocationOverlay(new google.maps.LatLng(lat, lng), map);
             
-            map.flyTo([lat, lng], 15, { animate: true, duration: 1.5 });
+            // 🌟 修正點：使用 Google Maps 標準語法進行平移與縮放
+            map.panTo({ lat, lng });
+            map.setZoom(15);
 
             searchGooglePlaces('寵物', 'gps', lat, lng, false);
           },
@@ -443,22 +444,19 @@ export default function FullMapAIPortal() {
     }
   }, [stores, displayedStores, selectedDetailStore, lastSearchMode]);
 
-  // 🌟 AI 語音朗讀功能 (Text-to-Speech)
   const speakText = (text: string) => {
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel(); // 停止上一句正在講的話
-      // 稍微過濾掉標點符號，讓語音引擎唸起來更順暢
+      window.speechSynthesis.cancel();
       const cleanText = text.replace(/[*#]/g, '');
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.lang = 'zh-TW';
-      utterance.rate = 1.05; // 語速稍微加快一點比較自然
+      utterance.rate = 1.05;
       window.speechSynthesis.speak(utterance);
     }
   };
 
-  // 🌟 AI 語音輸入功能 (Speech-to-Text)
   const toggleListening = () => {
-    if (isListening) return; // 已經在聽了就忽略
+    if (isListening) return;
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -473,14 +471,12 @@ export default function FullMapAIPortal() {
 
     recognition.onstart = () => {
       setIsListening(true);
-      // 中斷 AI 講話，讓使用者說話
       if ('speechSynthesis' in window) window.speechSynthesis.cancel(); 
     };
 
     recognition.onresult = (event: any) => {
       const transcript = event.results[0][0].transcript;
       setInputQuery(transcript);
-      // 🌟 使用者講完話，自動送出！
       handleSendMessage(transcript);
     };
 
@@ -635,10 +631,10 @@ export default function FullMapAIPortal() {
 
       if (chatData.action === 'chat') {
         setMessages(prev => [...prev, { sender: 'ai', text: chatData.reply }]);
-        speakText(chatData.reply); // 🌟 念出 AI 釐清問題的回覆
+        speakText(chatData.reply); 
       } else if (chatData.action === 'search') {
         setMessages(prev => [...prev, { sender: 'ai', text: chatData.reply }]);
-        speakText(chatData.reply); // 🌟 念出 AI 準備搜尋的提示
+        speakText(chatData.reply); 
         
         const finalKeyword = chatData.keyword || text;
         const targetLat = chatData.targetLocation?.lat || null;
@@ -649,7 +645,7 @@ export default function FullMapAIPortal() {
         if (latestStores.length === 0) {
            const noResultMsg = '抱歉，系統在該地區附近暫時找不到符合條件的店家。';
            setMessages(prev => [...prev, { sender: 'ai', text: noResultMsg }]);
-           speakText(noResultMsg); // 🌟 念出無結果提示
+           speakText(noResultMsg); 
            setIsAiTyping(false);
            return;
         }
@@ -673,7 +669,7 @@ export default function FullMapAIPortal() {
         
         if (evalData.reply) {
           setMessages(prev => [...prev, { sender: 'ai', text: evalData.reply }]);
-          speakText(evalData.reply); // 🌟 念出最終店家推薦回覆
+          speakText(evalData.reply); 
           
           if (evalData.recommendedIds && Array.isArray(evalData.recommendedIds)) {
             if (evalData.recommendedIds.length > 0) {
@@ -727,7 +723,6 @@ export default function FullMapAIPortal() {
                          `💉 核心疫苗排程：\n「${tempProfile.vaccineName}」需每年補打，預計下次補打日為【${nextVacStr}】。`;
 
     setMessages(prev => [...prev, { sender: 'ai', text: healthReport }]);
-    // 🌟 念出生命檔案更新完成的提示
     speakText(`生命檔案已更新！我已經為${tempProfile.name}安排好接下來的健康預防排程囉！`);
     searchGooglePlaces(lastKeyword, 'gps', null, null, false);
     
@@ -837,7 +832,7 @@ export default function FullMapAIPortal() {
         </div>
       </header>
 
-      {/* 🌟 回到我的位置按鈕 */}
+      {/* 回到我的位置按鈕 */}
       <button 
         onClick={handleReturnToLocation}
         className="absolute top-[80px] right-3 md:top-24 md:right-5 z-20 bg-[#FFFDF9]/90 backdrop-blur-xl shadow-[0_8px_24px_rgba(56,49,45,0.12)] rounded-full p-3 text-[#4A423D] hover:text-[#B88746] transition-all ring-1 ring-[#E8DFD8] active:scale-95"
@@ -911,7 +906,6 @@ export default function FullMapAIPortal() {
             <div className="relative z-10 mt-5 pt-2 border-t border-[#E8DFD8]">
               <div className="flex items-center bg-white ring-1 ring-[#E8DFD8] rounded-[24px] p-1.5 focus-within:ring-2 focus-within:ring-[#B88746]/30 transition-all shadow-sm">
                 
-                {/* 🌟 語音辨識麥克風按鈕 */}
                 <button
                   onClick={toggleListening}
                   className={`p-2.5 rounded-full transition-all flex-shrink-0 ${isListening ? 'bg-rose-100 text-rose-500 animate-pulse' : 'text-[#A67C52] hover:bg-[#F7F2EA]'}`}
@@ -943,7 +937,7 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 🌟 喚醒懸浮鈕 */}
+      {/* 喚醒懸浮鈕 */}
       {isAiBoxMinimized && (
         <div className={`absolute z-30 flex flex-col items-end pointer-events-auto transition-all duration-400 ease-out right-4 md:right-6 animate-bounce ${
           displayedStores.length > 0 && !selectedDetailStore ? 'bottom-[130px] md:bottom-8' : 'bottom-6 md:bottom-8'
@@ -974,7 +968,7 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 🌟 底部店家精選卡片 */}
+      {/* 底部店家精選卡片 */}
       {displayedStores.length > 0 && !selectedDetailStore && (
         <div className="absolute bottom-4 md:bottom-8 left-0 right-0 z-20 px-4 md:px-6 md:pr-[440px] flex space-x-4 overflow-x-auto pb-4 snap-x hide-scrollbar pointer-events-auto">
           {displayedStores.map((store, index) => (
@@ -1196,7 +1190,7 @@ export default function FullMapAIPortal() {
         </div>
       )}
 
-      {/* 9. 毛孩生命檔案 Modal */}
+      {/* 毛孩生命檔案 Modal */}
       {isPetModalOpen && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-[#2A2320]/40 backdrop-blur-md animate-in fade-in duration-200">
           <div className="bg-[#FFFDF9]/95 backdrop-blur-3xl w-full max-w-md rounded-[32px] shadow-2xl ring-1 ring-white/80 relative flex flex-col max-h-[90dvh]">
